@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSINTForge v3 — Intelligence Console</title>
+<!-- Web fonts intentionally not loaded from a CDN: every page load would
+     announce this console to a third party. The stacks below fall back to
+     locally installed Inter / JetBrains Mono, then to system faces. -->
+<style>
+:root{
+  --bg:#070b12;--panel:#0d1420;--panel2:#101a2b;--line:#1c2940;--line2:#26375a;
+  --txt:#dbe7f5;--dim:#7e8ca3;--acc:#22d3ee;--acc2:#34d399;--warn:#fbbf24;--bad:#f87171;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;line-height:1.55;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(1200px 500px at 75% -10%,rgba(34,211,238,.07),transparent),
+             radial-gradient(800px 400px at -10% 110%,rgba(52,211,153,.05),transparent)}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;background:#0a101c;border:1px solid var(--line2);color:var(--txt);border-radius:8px;padding:9px 12px;font-size:13.5px;outline:none;transition:border-color .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--acc)}
+.mono{font-family:var(--mono)}.dim{color:var(--dim)}
+#side{position:fixed;left:0;top:0;bottom:0;width:234px;background:rgba(13,20,32,.92);border-right:1px solid var(--line);z-index:20;display:flex;flex-direction:column;padding:18px 12px;backdrop-filter:blur(8px)}
+.logo{display:flex;gap:10px;align-items:center;padding:4px 8px 16px}
+.logo svg{width:34px;height:34px;flex:none}.logo b{font-size:15.5px;letter-spacing:.4px}
+.logo small{display:block;color:var(--dim);font-size:10.5px;letter-spacing:2px;text-transform:uppercase}
+.nav{display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.nav button{display:flex;align-items:center;gap:10px;padding:9px 11px;border:none;background:transparent;color:var(--dim);border-radius:8px;font-size:13.5px;text-align:left;transition:.15s}
+.nav button svg{width:16px;height:16px;flex:none}
+.nav button:hover{color:var(--txt);background:#13203490}
+.nav button.on{color:var(--txt);background:linear-gradient(90deg,rgba(34,211,238,.14),rgba(34,211,238,.03));box-shadow:inset 2px 0 0 var(--acc)}
+.sidefoot{margin-top:auto;padding:12px 8px 4px;font-size:11px;color:var(--dim);border-top:1px solid var(--line)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:1px}
+.dot.ok{background:var(--acc2)}.dot.bad{background:var(--bad)}
+main{margin-left:234px;padding:22px 28px 60px;position:relative;z-index:1;max-width:1240px}
+#topbar{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+#topbar h1{font-size:19px;font-weight:700;letter-spacing:.3px}.spacer{flex:1}
+.pill{font-size:11.5px;padding:4px 11px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);background:var(--panel)}
+.pill.ok{color:var(--acc2);border-color:#1e4d3a}
+.icobtn{background:var(--panel);border:1px solid var(--line2);border-radius:8px;color:var(--dim);width:36px;height:36px;display:grid;place-items:center;transition:.15s}
+.icobtn:hover{color:var(--txt);border-color:var(--acc)}
+#prog{height:2px;background:transparent;border-radius:2px;margin:8px 0 16px;overflow:hidden}
+#prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+.card{background:linear-gradient(180deg,var(--panel),rgba(13,20,32,.6));border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px;animation:rise .35s ease}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card h2{font-size:14.5px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card h3{font-size:13px;color:var(--acc);margin:18px 0 8px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:220px}
+.btn{background:linear-gradient(180deg,#153450,#0f2537);border:1px solid var(--line2);color:var(--txt);padding:9px 18px;border-radius:8px;font-size:13.5px;font-weight:600;transition:.15s;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{border-color:var(--acc);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.btn.prime{background:linear-gradient(180deg,#0e7490,#0a5468);border-color:#0e7490}
+.btn.prime:hover{box-shadow:0 0 18px rgba(34,211,238,.35)}
+.btn.ghost{background:transparent}.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.btn svg{width:14px;height:14px}
+.spin{width:13px;height:13px;border:2px solid #ffffff40;border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;display:inline-block}
+@keyframes rot{to{transform:rotate(360deg)}}
+table{width:100%;border-collapse:collapse;font-size:12.8px;margin-top:6px}
+th{color:var(--dim);font-weight:600;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.8px;padding:6px 10px;border-bottom:1px solid var(--line2)}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;word-break:break-word}
+tr:hover td{background:rgba(34,211,238,.03)}
+.tag{font-family:var(--mono);font-size:10.5px;color:var(--acc);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.22);padding:2px 7px;border-radius:5px;white-space:nowrap}
+.chip{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:.5px}
+.c-high{background:rgba(52,211,153,.12);color:var(--acc2);border:1px solid #1e4d3a}
+.c-med{background:rgba(251,191,36,.1);color:var(--warn);border:1px solid #4d3d14}
+.c-low{background:rgba(125,139,163,.12);color:var(--dim);border:1px solid var(--line2)}
+.url{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:2px;word-break:break-all}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:12px}
+.site{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--panel2);display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;transition:.2s}
+.site b{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:999px;letter-spacing:.6px;flex:none}
+.st-pend{color:var(--dim);border:1px solid var(--line2)}.st-run{color:var(--acc)}
+.st-hit{color:#04121b;background:var(--acc2);font-weight:700}
+.st-miss{color:var(--dim);border:1px solid var(--line2)}.st-err{color:var(--bad);border:1px solid #5b2430}
+.site.hit{border-color:#1e4d3a;box-shadow:0 0 14px rgba(52,211,153,.1)}
+.progline{height:5px;background:#0a101c;border-radius:99px;overflow:hidden;margin-top:12px;border:1px solid var(--line)}
+.progline i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .25s}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px}
+.kv .cell{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kv .cell small{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:1px}
+.kv .cell .v{font-family:var(--mono);font-size:12px;margin-top:4px;word-break:break-all;color:#a5f3fc}
+.bars{display:flex;gap:3px;align-items:flex-end;height:70px;margin-top:8px}
+.bars div{flex:1;background:linear-gradient(180deg,var(--acc),#0e7490);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.bars div:hover{opacity:1;outline:1px solid var(--acc)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips span,.chips a{font-size:11.5px;background:var(--panel2);border:1px solid var(--line);padding:4px 10px;border-radius:999px;color:var(--txt);text-decoration:none}
+.chips span b{color:var(--acc)}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.thumbs img{width:86px;height:86px;object-fit:cover;border-radius:8px;border:1px solid var(--line2);background:#000;cursor:pointer}
+.drop{border:2px dashed var(--line2);border-radius:12px;padding:26px;text-align:center;color:var(--dim);transition:.2s;cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--acc);color:var(--txt);background:rgba(34,211,238,.04)}
+.dorkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:10px}
+.dorkgrid a{display:block;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--txt);transition:.15s}
+.dorkgrid a:hover{border-color:var(--acc);text-decoration:none;transform:translateY(-1px)}
+.dorkgrid a small{display:block;color:var(--dim);font-size:10.5px;word-break:break-all}
+.tabs{display:flex;gap:6px;margin:12px 0 4px;flex-wrap:wrap}
+.tabs button{background:var(--panel2);border:1px solid var(--line);color:var(--dim);padding:6px 13px;border-radius:8px;font-size:12px;font-weight:600}
+.tabs button.on{color:var(--txt);border-color:var(--acc);box-shadow:inset 0 -2px 0 var(--acc)}
+.meter{height:6px;background:#0a101c;border-radius:99px;overflow:hidden;border:1px solid var(--line);width:90px;flex:none}
+.meter i{display:block;height:100%}
+.modal{position:fixed;inset:0;background:rgba(4,7,12,.8);backdrop-filter:blur(6px);z-index:100;display:none;place-items:center;padding:20px}
+.modal.show{display:grid}
+.mbox{background:var(--panel);border:1px solid var(--line2);border-radius:16px;max-width:560px;width:100%;padding:28px;animation:rise .3s ease;max-height:92vh;overflow-y:auto}
+.mbox h2{font-size:18px;margin-bottom:10px}
+.mbox p,.mbox li{color:var(--dim);font-size:13px;margin-bottom:8px}
+.mbox ul{padding-left:18px;margin-bottom:12px}
+#toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--acc);padding:11px 16px;border-radius:9px;font-size:13px;animation:rise .25s ease;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.toast.err{border-left-color:var(--bad)}.toast.ok{border-left-color:var(--acc2)}
+.legal{margin-top:26px;color:var(--dim);font-size:11px;border-top:1px solid var(--line);padding-top:12px}
+#gWrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#05080f}
+#gCanvas{display:block;width:100%;cursor:grab}
+#gCanvas:active{cursor:grabbing}
+#gPanel{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;z-index:5}
+#gPanel .chip{cursor:pointer}
+#gPanel input{flex:1;min-width:180px;font-size:12px;padding:6px 10px}
+#gPanel button{padding:6px 11px;font-size:12px;border-radius:8px}
+#gStats{position:absolute;bottom:10px;left:10px;background:rgba(13,20,32,.85);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:11px;color:var(--dim);font-family:var(--mono);z-index:5}
+#gLegend{position:absolute;bottom:10px;right:10px;background:rgba(13,20,32,.85);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:11px;z-index:5}
+#gLegend .row{display:flex;align-items:center;gap:6px;margin:2px 0}
+#gLegend i{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+#gMenu{position:fixed;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:4px;z-index:300;display:none;min-width:180px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+#gMenu button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt);padding:6px 10px;font-size:12.5px;border-radius:5px}
+#gMenu button:hover{background:var(--panel2)}
+#gMenu hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+#nodeInfo{position:absolute;top:10px;right:10px;width:320px;max-height:calc(100% - 80px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:12px 14px;font-size:12px;z-index:6;display:none}
+#nodeInfo h4{font-size:13px;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+#nodeInfo .dim{font-size:11px}
+#nodeInfo ul{padding-left:16px;margin:6px 0}
+@media(max-width:940px){
+  #side{position:static;width:100%;flex-direction:row;align-items:center;padding:10px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto}
+  .logo{padding:0 10px 0 0}.nav{flex-direction:row}.sidefoot{display:none}
+  main{margin-left:0;padding:16px 14px 50px}
+}
+</style>
+</head>
+<body>
+<div class="modal" id="attestModal">
+  <div class="mbox">
+    <h2>⚖️ Lawful Use Attestation</h2>
+    <p>OSINTForge collects <b style="color:var(--txt)">publicly available data only</b>. By continuing you attest that:</p>
+    <ul>
+      <li>You have a lawful purpose (authorized investigation, journalism, security research, self-lookup, or client work with consent).</li>
+      <li>You will not use it for stalking, harassment, doxxing, blackmail, or discrimination.</li>
+      <li>You comply with applicable law (GDPR/CCPA/CFAA equivalents) and platform terms.</li>
+    </ul>
+    <input id="attestPurpose" class="grow" style="width:100%;margin-bottom:10px" placeholder="State your purpose (e.g. 'Red-team lab, scope doc RT-2026-08')">
+    <input id="attestType" style="width:100%;margin-bottom:14px;font-family:var(--mono)" placeholder='Type "I AGREE" exactly'>
+    <button class="btn prime" id="attestGo" disabled style="width:100%;justify-content:center">Enter Console</button>
+  </div>
+</div>
+<div class="modal" id="setModal">
+  <div class="mbox">
+    <h2>⚙️ Settings</h2>
+    <p>CORS relay used to probe sites that block direct browser requests. Point this at your own relay for speed/privacy.</p>
+    <label class="dim" style="font-size:11px">Relay base URL (URL-encoded target appended)</label>
+    <input id="setRelay" style="width:100%;margin:6px 0 14px" class="mono">
+    <label class="dim" style="font-size:11px">Parallel probe concurrency: <b id="concLbl">4</b></label>
+    <input id="setConc" type="range" min="1" max="10" value="4" style="width:100%;margin:6px 0 18px;padding:0">
+    <div class="row">
+      <button class="btn" id="setSave">Save</button>
+      <button class="btn ghost" id="setResetAttest">Reset attestation</button>
+      <button class="btn ghost" id="setClearAudit">Clear audit log</button>
+    </div>
+  </div>
+</div>
+<div id="side">
+  <div class="logo">
+    <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="17" stroke="#22d3ee" stroke-width="1.6" opacity=".5"/><circle cx="20" cy="20" r="10.5" stroke="#22d3ee" stroke-width="1.4" opacity=".7"/><circle cx="20" cy="20" r="3.4" fill="#22d3ee"/><path d="M20 3v6M20 31v6M3 20h6M31 20h6" stroke="#34d399" stroke-width="1.6"/></svg>
+    <div><b>OSINTForge</b><small>Intel Console v3</small></div>
+  </div>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidefoot">
+    <span class="dot" id="relayDot"></span>relay <span id="relayLbl">checking…</span><br>
+    <span class="dot" id="attDot"></span>attestation <span id="attLbl"></span>
+  </div>
+</div>
+<main>
+  <div id="topbar">
+    <h1 id="viewTitle">Username Sweep</h1>
+    <div class="spacer"></div>
+    <span class="pill" id="casePill">case findings: 0</span>
+    <button class="icobtn" id="openSettings" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1 1.51 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+  <div id="prog"><i></i></div>
+  <section id="view"></section>
+  <p class="legal">OSINTForge v3 operates on publicly available data through your browser; every query is recorded in the local audit trail. The Entity Graph exports to GEXF/JSON-LD for Gephi/Maltego/Neo4j. Findings are leads — corroborate before operational use.</p>
+</main>
+<div id="toasts"></div>
+<div id="gMenu"></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const state={relay:LS.get("osf_relay","https://api.allorigins.win/get?url="),conc:LS.get("osf_conc",4),audit:LS.get("osf_audit",[]),vault:LS.get("osf_vault",[]),findings:[],attest:LS.get("osf_attest",null)};
+function toast(m,t=""){const d=document.createElement("div");d.className="toast "+t;d.textContent=m;$("#toasts").appendChild(d);setTimeout(()=>{d.style.opacity=0;d.style.transition="opacity .4s";setTimeout(()=>d.remove(),400)},4200)}
+function setProg(p){$("#prog i").style.width=p?`${p}%`:"0";if(p>=100)setTimeout(()=>$("#prog i").style.width="0",600)}
+function busy(b){document.body.style.cursor=b?"wait":"default"}
+function sigT(ms){const c=new AbortController();setTimeout(()=>c.abort(),ms);return c.signal}
+function addFinding(f){state.findings.push({...f,ts:new Date().toISOString()});$("#casePill").textContent=`case findings: ${state.findings.length}`}
+function audit(a,t){state.audit.unshift({ts:new Date().toISOString(),action:a,target:t});state.audit=state.audit.slice(0,500);LS.set("osf_audit",state.audit)}
+function copy(s){navigator.clipboard&&navigator.clipboard.writeText(s).then(()=>toast("Copied to clipboard","ok"))}
+function dedupe(list){const s=new Set();return list.filter(f=>{const k=(f.url||"")+"::"+(f.title||"");if(s.has(k))return false;s.add(k);return true})}
+function ham(a,b){if(!a||!b||a.length!==b.length)return 64;let d=0;const W=[0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4];for(let i=0;i<a.length;i++)d+=W[parseInt(a[i],16)^parseInt(b[i],16)];return d}
+const simPct=(a,b)=>Math.max(0,Math.round((1-ham(a,b)/64)*100));
+
+async function relayGet(url){
+  const relays=[state.relay,"https://api.allorigins.win/get?url=","https://corsproxy.io/?url="].filter(Boolean);
+  for(const base of [...new Set(relays)]){
+    try{
+      const res=await fetch(base+encodeURIComponent(url),{signal:sigT(22000)});
+      if(base.includes("allorigins")){const j=await res.json();return{status:(j.status&&j.status.http_code)||200,text:j.contents||"",via:"allorigins"}}
+      return{status:res.status,text:await res.text(),via:"corsproxy"};
+    }catch(e){}
+  }
+  throw new Error("all relays failed");
+}
+async function smartFetch(url,{timeout=15000}={}){
+  try{const r=await fetch(url,{signal:sigT(timeout)});return{status:r.status,text:await r.text(),via:"direct"}}catch(e){}
+  return relayGet(url);
+}
+async function smartJSON(url){
+  try{const r=await fetch(url,{signal:sigT(15000)});if(r.ok)return await r.json()}catch(e){}
+  try{const r=await relayGet(url);return JSON.parse(r.text)}catch(e){return null}
+}
+async function apiProbe(url,validate){
+  try{const r=await fetch(url,{signal:sigT(12000)});const t=await r.text();return validate(r.status,t)?"hit":"miss"}catch(e){}
+  try{const r=await relayGet(url);return validate(r.status||200,r.text)?"hit":"miss"}catch(e){return"err"}
+}
+async function poolMap(items,fn,n){
+  const res=new Array(items.length);let i=0;
+  const wk=Array.from({length:Math.min(n||state.conc,items.length)},async()=>{
+    while(i<items.length){const idx=i++;try{res[idx]=await fn(items[idx],idx)}catch(e){res[idx]={error:e.message}}}
+  });
+  await Promise.all(wk);return res;
+}
+
+let PENDING=null;
+function pivot(mod,val){PENDING={mod,val};go(mod)}
+function takePivot(mod){if(PENDING&&PENDING.mod===mod){const v=PENDING.val;PENDING=null;return v}return null}
+
+const md5=(()=>{const R=[7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+const K=[];for(let i=0;i<64;i++)K[i]=Math.floor(Math.abs(Math.sin(i+1))*4294967296);
+const rot=(v,s)=>(v<<s)|(v>>>(32-s));
+return function(str){const bytes=unescape(encodeURIComponent(str)),ml=bytes.length*8,w=[];
+for(let i=0;i<bytes.length;i++)w[i>>2]=(w[i>>2]|0)|(bytes.charCodeAt(i)<<((i%4)*8));
+w[bytes.length>>2]=(w[bytes.length>>2]|0)|(0x80<<((bytes.length%4)*8));
+const total=Math.ceil((bytes.length+9)/64)*16;for(let i=w.length;i<total;i++)w[i]=0;
+w[total-2]=ml&0xffffffff;w[total-1]=Math.floor(ml/0x100000000);
+let a0=0x67452301,b0=0xefcdab89,c0=0x98badcfe,d0=0x10325476;
+for(let off=0;off<total;off+=16){let A=a0,B=b0,C=c0,D=d0;
+for(let i=0;i<64;i++){let F,g;
+if(i<16){F=(B&C)|(~B&D);g=i}else if(i<32){F=(D&B)|(~D&C);g=(5*i+1)%16}
+else if(i<48){F=B^C^D;g=(3*i+5)%16}else{F=C^(B|~D);g=(7*i)%16}
+F=(F+A+K[i]+(w[off+g]||0))>>>0;A=D;D=C;C=B;B=(B+rot(F,R[i]))>>>0}
+a0=(a0+A)>>>0;b0=(b0+B)>>>0;c0=(c0+C)>>>0;d0=(d0+D)>>>0}
+const hx=n=>Array.from({length:4},(_,i)=>((n>>>(i*8))&255).toString(16).padStart(2,"0")).join("");
+return hx(a0)+hx(b0)+hx(c0)+hx(d0)}})();
+
+function loadImg(src){return new Promise((res,rej)=>{const im=new Image();im.crossOrigin="anonymous";im.onload=()=>res(im);im.onerror=()=>rej(new Error("load failed"));im.src=src})}
+function gray(data,n,m){const g=[];for(let i=0;i<n;i++){g.push([]);for(let j=0;j<m;j++){const p=(i*m+j)*4;g[i].push(.299*data[p]+.587*data[p+1]+.114*data[p+2])}}return g}
+function imgHashes(im){
+  const c=document.createElement("canvas"),x=c.getContext("2d",{willReadFrequently:true});
+  c.width=8;c.height=8;x.drawImage(im,0,0,8,8);
+  const d1=x.getImageData(0,0,8,8).data;let sum=0;const g1=[];
+  for(let i=0;i<64;i++){const v=.299*d1[i*4]+.587*d1[i*4+1]+.114*d1[i*4+2];g1.push(v);sum+=v}
+  const avg=sum/64;
+  c.width=9;c.height=8;x.drawImage(im,0,0,9,8);
+  const g2=gray(x.getImageData(0,0,9,8).data,8,9);let dh="";
+  for(let i=0;i<8;i++)for(let j=0;j<8;j++)dh+=g2[i][j]<g2[i][j+1]?"1":"0";
+  c.width=32;c.height=32;x.drawImage(im,0,0,32,32);
+  const G=gray(x.getImageData(0,0,32,32).data,32,32),N=32,M=[];
+  for(let u=0;u<8;u++){M.push([]);for(let v=0;v<8;v++){let s=0;
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++)s+=G[i][j]*Math.cos((2*i+1)*u*Math.PI/(2*N))*Math.cos((2*j+1)*v*Math.PI/(2*N));
+    M[u].push(s)}}
+  const flat=[];for(let i=0;i<8;i++)for(let j=0;j<8;j++)if(i||j)flat.push(M[i][j]);
+  const med=[...flat].sort((a,b)=>a-b)[Math.floor(flat.length/2)];
+  let ph="";for(let i=0;i<8;i++)for(let j=0;j<8;j++)if(i||j)ph+=M[i][j]>=med?"1":"0";
+  const hex=b=>BigInt("0b"+b).toString(16).padStart(b.length/4,"0");
+  return{ahash:hex(g1.map(v=>v>=avg?"1":"0").join("")),dhash:hex(dh),phash:hex(ph)};
+}
+function thumb(im){const c=document.createElement("canvas");const s=96/Math.max(im.width,im.height);c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));c.getContext("2d").drawImage(im,0,0,c.width,c.height);return c.toDataURL("image/jpeg",.7)}
+function parseEXIF(buf){
+  try{
+    const dv=new DataView(buf);if(dv.byteLength<4||dv.getUint16(0)!==0xFFD8)return null;
+    let off=2;
+    while(off<dv.byteLength-4){const m=dv.getUint16(off);if(m===0xFFE1)break;if((m&0xFF00)!==0xFF00)return null;off+=2+dv.getUint16(off+2)}
+    if(off>=dv.byteLength-4)return null;
+    const start=off+4;if(dv.getUint32(start)!==0x45786966)return null;
+    const t=start+6,le=dv.getUint16(t)===0x4949;
+    const g16=o=>dv.getUint16(t+o,le),g32=o=>dv.getUint32(t+o,le);
+    if(g16(2)!==0x2A)return null;
+    const out={};
+    const ascii=(e,cnt)=>{const p=cnt>4?t+g32(e):e;let s="";for(let i=0;i<cnt-1;i++)s+=String.fromCharCode(dv.getUint8(p+i));return s.trim()};
+    const rats=(e,cnt)=>{const p=t+g32(e),a=[];for(let i=0;i<cnt;i++){const n=g32(p+i*8),d=g32(p+i*8+4);a.push(d?n/d:0)}return a};
+    const readIFD=(ptr,cb)=>{const n=g16(ptr);for(let i=0;i<n;i++){const e=ptr+2+i*12;cb(g16(e),g16(e+2),g32(e+4),e+8)}return g32(ptr+2+n*12)};
+    let ex=0,gp=0;
+    const ifd0=t+g32(4);
+    readIFD(ifd0,(tag,ty,cnt,e)=>{
+      if(tag===0x8769)ex=g32(e);else if(tag===0x8825)gp=g32(e);
+      else if(tag===271)out.make=ascii(e,cnt);else if(tag===272)out.model=ascii(e,cnt);
+      else if(tag===305)out.software=ascii(e,cnt);else if(tag===306)out.datetime=ascii(e,cnt);
+    });
+    if(ex)readIFD(t+ex,(tag,ty,cnt,e)=>{if(tag===36867)out.taken=ascii(e,cnt);else if(tag===36868&&!out.taken)out.taken=ascii(e,cnt)});
+    if(gp){const g={};
+      readIFD(t+gp,(tag,ty,cnt,e)=>{
+        if(tag===1)g.latRef=ascii(e,cnt);else if(tag===2)g.lat=rats(e,cnt);
+        else if(tag===3)g.lonRef=ascii(e,cnt);else if(tag===4)g.lon=rats(e,cnt);
+        else if(tag===6)g.alt=rats(e,1)[0];else if(tag===29)g.gdate=ascii(e,cnt);
+      });
+      const dms=a=>(a[0]||0)+(a[1]||0)/60+(a[2]||0)/3600;
+      if(g.lat&&g.lon&&g.lat.length===3&&g.lon.length===3)
+        out.gps={lat:+(((g.latRef==="S"?-1:1)*dms(g.lat)).toFixed(6)),lon:+(((g.lonRef==="W"?-1:1)*dms(g.lon)).toFixed(6)),alt:g.alt};
+    }
+    return Object.keys(out).length?out:null;
+  }catch(e){return null}
+}
+async function hostImage(file){
+  try{const fd=new FormData();fd.append("file",file);const r=await fetch("https://api.escuelajs.co/api/v1/files/upload",{method:"POST",body:fd,signal:sigT(20000)});const j=await r.json();if(j&&j.location)return j.location}catch(e){}
+  try{const fd=new FormData();fd.append("file",file);const r=await fetch("https://tmpfiles.org/api/v1/upload",{method:"POST",body:fd,signal:sigT(20000)});const j=await r.json();if(j&&j.data&&j.data.url)return j.data.url.replace("tmpfiles.org/","tmpfiles.org/dl/")}catch(e){}
+  return null;
+}
+
+const MODULES=[
+ {id:"graph",label:"🕸️ Entity Graph",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>'},
+ {id:"username",label:"Username Sweep",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>'},
+ {id:"dossier",label:"Dossier Compiler",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/></svg>'},
+ {id:"email",label:"Email Intel",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>'},
+ {id:"image",label:"Reverse Image",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>'},
+ {id:"reddit",label:"Reddit Deep Dive",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="14" r="8"/><path d="M12 6V3l3 1"/><circle cx="9" cy="13" r=".5" fill="currentColor"/><circle cx="15" cy="13" r=".5" fill="currentColor"/><path d="M9 17c2 1.2 4 1.2 6 0"/></svg>'},
+ {id:"meta",label:"People Search",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'},
+ {id:"domain",label:"Domain / DNS / CT",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg>'},
+ {id:"ip",label:"IP Intel",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>'},
+ {id:"phone",label:"Phone Parse",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 2z"/></svg>'},
+ {id:"case",label:"Case & Audit",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>'},
+];
+const chip=c=>`<span class="chip c-${c}">${c.toUpperCase()}</span>`;
+function findingsTable(list){
+  if(!list.length)return'<p class="dim">No findings.</p>';
+  return`<table><thead><tr><th style="width:110px">Type</th><th>Finding</th><th>Detail</th><th style="width:70px">Conf</th></tr></thead><tbody>${
+    dedupe(list).map(f=>`<tr><td><span class="tag">${esc(f.kind)}</span></td><td>${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="url">${esc(f.url)}</div>`:esc(f.title)}</td><td class="dim">${esc(f.detail||"")}</td><td>${chip(f.confidence)}</td></tr>`).join("")
+  }</tbody></table>`;
+}
+const kvHTML=pairs=>`<div class="kv">${pairs.map(([k,v])=>`<div class="cell"><small>${esc(k)}</small><div class="v">${esc(v)}</div></div>`).join("")}</div>`;
+
+const TYPE_META={
+  person:   {color:"#22d3ee",label:"Person / Handle"},
+  email:    {color:"#34d399",label:"Email"},
+  domain:   {color:"#fbbf24",label:"Domain"},
+  ip:       {color:"#f87171",label:"IP"},
+  service:  {color:"#60a5fa",label:"Service / Profile"},
+  location: {color:"#a78bfa",label:"Location"},
+  secret:   {color:"#fb7185",label:"Secret / Key"},
+  finding:  {color:"#6b7280",label:"Finding (leaf)"},
+};
+const EDGE_COLORS={owns:"#22d3ee",hosts:"#fbbf24",resolves_to:"#fbbf24",mentioned_in:"#94a3b8",avatar_of:"#22d3ee",derived_from:"#34d399",similar_to:"#34d399",appears_in:"#a78bfa",uses:"#60a5fa",located:"#a78bfa"};
+
+function buildGraph(findings){
+  const nodes=new Map();
+  const edges=[];
+  const ensure=(id,label,type,url)=>{
+    if(!nodes.has(id)){
+      nodes.set(id,{id:id,label:label,type:type,deg:0,url:url||"",findings:[],x:(Math.random()-.5)*600,y:(Math.random()-.5)*400,vx:0,vy:0,fixed:false,hidden:false});
+    }
+    return nodes.get(id);
+  };
+  const people=new Map();
+  findings.forEach(f=>{
+    if(f.kind==="canonical_name"||f.kind==="person"){
+      const k="p:"+f.title.toLowerCase().trim();
+      people.set(k,ensure(k,f.title,"person"));
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="profile"||f.kind==="derived_username"){
+      const m=f.title.match(/@([A-Za-z0-9_.-]+)/);
+      if(m){
+        const k="p:"+m[1].toLowerCase();
+        const n=ensure(k,m[1],"person",f.url);
+        if(f.kind==="profile"){n.findings.push(f);n.deg++;}
+      }
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="email_exposed"||f.kind==="alt_email"){
+      const m=f.title.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      if(m){
+        const k="e:"+m[0].toLowerCase();
+        const n=ensure(k,m[0],"email");
+        n.findings.push(f);n.deg++;
+      }
+    }
+  });
+  state.audit.forEach(a=>{
+    if(a.action==="email_intel"&&a.target){
+      const k="e:"+a.target.toLowerCase();
+      ensure(k,a.target,"email");
+    }
+  });
+  state.audit.forEach(a=>{if(a.action==="domain"&&a.target){const k="d:"+a.target.toLowerCase();ensure(k,a.target,"domain")}});
+  findings.forEach(f=>{
+    if(f.kind==="whois_rdap"||f.kind==="dns_ns"||f.kind==="nameserver"){
+      const m=f.title.match(/^[a-z0-9-]+\.[a-z]{2,}$/i);
+      if(m){const k="d:"+m[0].toLowerCase();const n=ensure(k,m[0],"domain",f.url);n.findings.push(f);n.deg++}
+    }
+    if(f.kind==="ct_subdomain"||f.kind==="wb_subdomain"){
+      const dom=f.title.trim();
+      const k="d:"+dom.toLowerCase();
+      const n=ensure(k,dom,"domain",f.url);
+      n.findings.push(f);n.deg++;
+      const parts=dom.split(".");
+      if(parts.length>2){
+        const parent=parts.slice(-2).join(".");
+        const pk="d:"+parent.toLowerCase();
+        if(nodes.has(pk)){edges.push({s:pk,t:k,type:"hosts",w:.8});nodes.get(pk).deg++;n.deg++}
+      }
+    }
+  });
+  state.audit.forEach(a=>{if(a.action==="ip"&&a.target){const k="i:"+a.target;ensure(k,a.target,"ip")}});
+  findings.forEach(f=>{
+    if(f.kind==="geo"||f.kind==="ptr"){
+      const m=f.title.match(/^\d+\.\d+\.\d+\.\d+/);
+      if(m){const k="i:"+m[0];const n=ensure(k,m[0],"ip",f.url);n.findings.push(f);n.deg++}
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="profile"){
+      const m=f.title.match(/^([^:]+):\s*@?([A-Za-z0-9_.-]+)/);
+      if(m){
+        const site=m[1].trim();
+        const handle=m[2].toLowerCase();
+        const pk="p:"+handle;
+        if(!nodes.has(pk))ensure(pk,handle,"person");
+        const sk="s:"+site.toLowerCase()+":"+handle;
+        const sn=ensure(sk,site+": @"+handle,"service",f.url);
+        sn.findings.push(f);sn.deg++;
+        edges.push({s:pk,t:sk,type:"owns",w:f.confidence==="high"?1:f.confidence==="med"?.6:.3});
+        nodes.get(pk).deg++;
+      }
+    }
+    if(f.kind==="linked_account"){
+      const m=f.title.match(/^([^:]+):\s*(.+)$/);
+      if(m){
+        const site=m[1].trim(),user=m[2].trim().toLowerCase();
+        const sk="s:"+site.toLowerCase()+":"+user;
+        const sn=ensure(sk,site+": "+user,"service",f.url);
+        sn.findings.push(f);sn.deg++;
+        const personIds=[...people.keys(),...[...nodes.values()].filter(n=>n.type==="person").map(n=>n.id)];
+        if(personIds.length){
+          edges.push({s:personIds[0],t:sk,type:"owns",w:.7});
+          nodes.get(personIds[0]).deg++;
+        }
+      }
+    }
+    if(f.kind==="github_attribution"){
+      const m=f.title.match(/account\(s\):\s*(.+)/);
+      if(m){
+        const handles=m[1].split(/,\s*/);
+        handles.forEach(h=>{
+          h=h.trim();
+          const pk="p:"+h.toLowerCase();
+          ensure(pk,h,"person");
+          const sk="s:github:"+h.toLowerCase();
+          const sn=ensure(sk,"GitHub: @"+h,"service","https://github.com/"+h);
+          sn.findings.push(f);sn.deg++;
+          edges.push({s:pk,t:sk,type:"owns",w:.9});
+          nodes.get(pk).deg++;
+        });
+      }
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="avatar"||f.kind==="user_image"){
+      const lastPerson=[...nodes.values()].find(n=>n.type==="person"&&n.id.startsWith("p:"));
+      if(lastPerson){
+        const ak="a:"+f.url;
+        const an=ensure(ak,"avatar:"+f.url.split("/").pop().slice(0,30),"service",f.url);
+        an.findings.push(f);an.deg++;
+        edges.push({s:lastPerson.id,t:ak,type:"avatar_of",w:.7});
+        lastPerson.deg++;
+      }
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="email_exposed"){
+      const m=f.title.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      if(m){
+        const ek="e:"+m[0].toLowerCase();
+        const personIds=[...nodes.values()].filter(n=>n.type==="person").map(n=>n.id);
+        if(personIds.length){
+          edges.push({s:personIds[0],t:ek,type:"owns",w:.5});
+          nodes.get(personIds[0]).deg++;
+          nodes.get(ek).deg++;
+        }
+      }
+    }
+  });
+  if(state.vault.length){
+    const clusters=[];
+    state.vault.forEach((v,idx)=>{
+      let found=false;
+      for(const cl of clusters){
+        if(simPct(v.phash,cl.rep.phash)>85){cl.members.push(idx);found=true;break}
+      }
+      if(!found)clusters.push({rep:v,members:[idx]});
+    });
+    clusters.filter(c=>c.members.length>1).forEach(cl=>{
+      cl.members.forEach(i=>{
+        const v=state.vault[i];
+        const nk="img:"+v.id;
+        const nn=ensure(nk,"image:"+v.name.slice(0,30),"service",v.src);
+        nn.deg++;
+        cl.members.forEach(j=>{
+          if(j!==i){
+            const v2=state.vault[j];
+            const nk2="img:"+v2.id;
+            const nn2=ensure(nk2,"image:"+v2.name.slice(0,30),"service",v2.src);
+            nn2.deg++;
+            edges.push({s:nk,t:nk2,type:"similar_to",w:simPct(v.phash,v2.phash)/100});
+          }
+        });
+      });
+    });
+  }
+  findings.forEach(f=>{
+    if(f.kind==="wb_secret"){
+      const k="sk:"+f.detail;
+      const n=ensure(k,f.title.slice(0,40),"secret",f.url);
+      n.findings.push(f);n.deg++;
+    }
+  });
+  findings.forEach(f=>{
+    if(f.kind==="location"){
+      const m=f.title.match(/Location:\s*(.+)/);
+      if(m){const k="l:"+m[1].toLowerCase();ensure(k,m[1],"location")}
+    }
+    if(f.kind==="exif_gps"){
+      const m=f.title.match(/GPS[^:]*:\s*([-\d.]+),([-\d.]+)/);
+      if(m){const k="l:"+m[1]+","+m[2];const n=ensure(k,"GPS "+m[1]+","+m[2],"location",f.url);n.findings.push(f);n.deg++}
+    }
+  });
+  const edgeSet=new Set();
+  const uEdges=edges.filter(e=>{
+    const k=[e.s,e.t].sort().join("|")+":"+e.type;
+    if(edgeSet.has(k))return false;
+    edgeSet.add(k);return true;
+  });
+  const connected=new Set();
+  uEdges.forEach(e=>{connected.add(e.s);connected.add(e.t)});
+  const kept=[...nodes.values()].filter(n=>n.deg>0||connected.has(n.id));
+  const nodeMap=new Map();kept.forEach(n=>nodeMap.set(n.id,n));
+  const finalEdges=uEdges.filter(e=>nodeMap.has(e.s)&&nodeMap.has(e.t));
+  const parent={};kept.forEach(n=>parent[n.id]=n.id);
+  const find=x=>{while(parent[x]!==x)x=parent[x]=parent[parent[x]];return x};
+  const union=(a,b)=>{parent[find(a)]=find(b)};
+  finalEdges.forEach(e=>union(e.s,e.t));
+  const clusters={};kept.forEach(n=>{const r=find(n.id);(clusters[r]=clusters[r]||[]).push(n.id)});
+  return{nodes:nodeMap,edges:finalEdges,clusters};
+}
+
+function viewGraph(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>🕸️ Entity Graph</h2>
+    <p class="sub">Force-directed intelligence graph auto-extracted from <b id="gSourceCount">0</b> session findings. Drag to reposition, wheel to zoom, pan by dragging the background. Hover to focus N-hop neighborhood, right-click for pivots, click to see detail panel.</p>
+    <div class="row">
+      <button class="btn" id="gExportGEXF">⬇ GEXF (Gephi)</button>
+      <button class="btn" id="gExportJSON">⬇ JSON-LD (Neo4j/Maltego)</button>
+      <button class="btn" id="gExportPNG">📸 PNG snapshot</button>
+      <button class="btn ghost" id="gRelayout">⟲ Re-layout</button>
+      <button class="btn ghost" id="gFit">⤢ Fit view</button>
+      <button class="btn ghost" id="gReset">♻ Reset</button>
+    </div>
+  </div>
+  <div class="card" style="padding:0">
+    <div id="gWrap" style="height:640px">
+      <div id="gPanel">
+        <input id="gSearch" class="mono" placeholder="filter by label, type, or URL…">
+        <button class="btn ghost" id="gFilterType">all types</button>
+        <button class="btn ghost" id="gToggleLeaves">hide leaves</button>
+      </div>
+      <canvas id="gCanvas"></canvas>
+      <div id="gStats">nodes: 0 · edges: 0 · clusters: 0</div>
+      <div id="gLegend"></div>
+      <div id="nodeInfo"></div>
+    </div>
+  </div>`;
+  const G=buildGraph(state.findings);
+  $("#gSourceCount").textContent=state.findings.length;
+  if(!G.nodes.size){
+    $("#view").innerHTML+=`<div class="card"><p class="dim">No findings yet. Run some modules first, then return here. Each finding becomes a node and relationships become typed edges.</p></div>`;
+    return;
+  }
+  const canvas=$("#gCanvas"),wrap=$("#gWrap");
+  const dpr=window.devicePixelRatio||1;
+  let W=wrap.clientWidth,H=wrap.clientHeight;
+  const resize=()=>{W=wrap.clientWidth;H=wrap.clientHeight;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+"px";canvas.style.height=H+"px"};
+  resize();
+  $("#gLegend").innerHTML='<div style="color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Entity Types</div>'+
+    Object.entries(TYPE_META).map(([k,v])=>`<div class="row"><i style="background:${v.color}"></i>${v.label}</div>`).join("");
+  let zoom=1,panX=0,panY=0;
+  let dragging=null,panning=false,lastM=null;
+  let hover=null,selected=null;
+  let hideLeaves=false,search="",typeFilter=null;
+  const nodes=[...G.nodes.values()];
+  const edges=G.edges;
+  const nodeById=new Map(nodes.map(n=>[n.id,n]));
+  const clusterKeys=Object.keys(G.clusters);
+  const clusterCenters={};
+  const cAngle=2*Math.PI/Math.max(1,clusterKeys.length);
+  clusterKeys.forEach((k,i)=>{
+    clusterCenters[k]={x:Math.cos(i*cAngle)*Math.min(W,H)*.3,y:Math.sin(i*cAngle)*Math.min(W,H)*.3};
+  });
+  nodes.forEach(n=>{
+    const c=Object.entries(G.clusters).find(([,ids])=>ids.includes(n.id));
+    const cc=c?clusterCenters[c[0]]:{x:0,y:0};
+    n.x=cc.x+(Math.random()-.5)*200;
+    n.y=cc.y+(Math.random()-.5)*200;
+  });
+  const adj=new Map();nodes.forEach(n=>adj.set(n.id,{out:[],in:[]}));
+  edges.forEach(e=>{
+    if(adj.has(e.s))adj.get(e.s).out.push(e);
+    if(adj.has(e.t))adj.get(e.t).in.push(e);
+  });
+  const neighbors=(id,hops=1)=>{
+    const seen=new Set([id]);
+    let frontier=[id];
+    for(let h=0;h<hops;h++){
+      const next=[];
+      frontier.forEach(f=>{
+        edges.forEach(e=>{
+          if(e.s===f&&!seen.has(e.t)){seen.add(e.t);next.push(e.t)}
+          if(e.t===f&&!seen.has(e.s)){seen.add(e.s);next.push(e.s)}
+        });
+      });
+      frontier=next;
+    }
+    return seen;
+  };
+  const toScreen=(x,y)=>[W/2+panX+x*zoom,H/2+panY+y*zoom];
+  const fromScreen=(sx,sy)=>[(sx-W/2-panX)/zoom,(sy-H/2-panY)/zoom];
+  const nodeAt=(sx,sy)=>{
+    const [wx,wy]=fromScreen(sx,sy);
+    for(let i=nodes.length-1;i>=0;i--){
+      const n=nodes[i];
+      if(n.hidden)continue;
+      const r=Math.max(6,Math.min(22,4+Math.log2(n.deg+1)*2.5));
+      if(Math.hypot(n.x-wx,n.y-wy)<r)return n;
+    }
+    return null;
+  };
+  let alpha=1;
+  const tick=()=>{
+    if(alpha<.005)return;
+    const visible=nodes.filter(n=>!n.hidden);
+    for(let i=0;i<visible.length;i++){
+      for(let j=i+1;j<visible.length;j++){
+        const a=visible[i],b=visible[j];
+        let dx=b.x-a.x,dy=b.y-a.y;
+        let d2=dx*dx+dy*dy;
+        if(d2<1)d2=1;
+        const d=Math.sqrt(d2);
+        const f=-300/d2*alpha;
+        const fx=dx/d*f,fy=dy/d*f;
+        if(!a.fixed){a.vx-=fx;a.vy-=fy}
+        if(!b.fixed){b.vx+=fx;b.vy+=fy}
+      }
+    }
+    edges.forEach(e=>{
+      const a=nodeById.get(e.s),b=nodeById.get(e.t);
+      if(!a||!b||a.hidden||b.hidden)return;
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const d=Math.sqrt(dx*dx+dy*dy)||.1;
+      const target=80/(e.w||.5);
+      const f=(d-target)*.05*alpha*(e.w||.5);
+      const fx=dx/d*f,fy=dy/d*f;
+      if(!a.fixed){a.vx+=fx;a.vy+=fy}
+      if(!b.fixed){b.vx-=fx;b.vy-=fy}
+    });
+    visible.forEach(n=>{
+      if(!n.fixed){
+        n.vx-=n.x*.001*alpha;
+        n.vy-=n.y*.001*alpha;
+      }
+    });
+    visible.forEach(n=>{
+      if(n.fixed){n.vx=0;n.vy=0;return}
+      n.vx*=.85;n.vy*=.85;
+      n.x+=n.vx;n.y+=n.vy;
+    });
+    alpha*=.995;
+  };
+  const render=()=>{
+    const ctx=canvas.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle="#05080f";ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="#0f1826";ctx.lineWidth=1;
+    const gsz=60*zoom;
+    const ox=(W/2+panX)%gsz,oy=(H/2+panY)%gsz;
+    ctx.beginPath();
+    for(let x=ox;x<W;x+=gsz){ctx.moveTo(x,0);ctx.lineTo(x,H)}
+    for(let y=oy;y<H;y+=gsz){ctx.moveTo(0,y);ctx.lineTo(W,y)}
+    ctx.stroke();
+    const hoverSet=hover?neighbors(hover.id,1):null;
+    const selSet=selected?neighbors(selected.id,1):null;
+    edges.forEach(e=>{
+      const a=nodeById.get(e.s),b=nodeById.get(e.t);
+      if(!a||!b||a.hidden||b.hidden)return;
+      const [x1,y1]=toScreen(a.x,a.y),[x2,y2]=toScreen(b.x,b.y);
+      let alpha2=.35;
+      if(hoverSet){alpha2=hoverSet.has(a.id)&&hoverSet.has(b.id)?.9:.05}
+      if(selSet){alpha2=selSet.has(a.id)&&selSet.has(b.id)?.9:.08}
+      ctx.strokeStyle=(EDGE_COLORS[e.type]||"#64748b")+(Math.round(alpha2*255).toString(16).padStart(2,"0"));
+      ctx.lineWidth=Math.max(.5,1.5*(e.w||.5));
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      const ang=Math.atan2(y2-y1,x2-x1);
+      const rr=Math.max(6,Math.min(22,4+Math.log2(b.deg+1)*2.5));
+      ctx.fillStyle=ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(x2-Math.cos(ang)*rr,y2-Math.sin(ang)*rr);
+      ctx.lineTo(x2-Math.cos(ang)*rr-8*Math.cos(ang-.4),y2-Math.sin(ang)*rr-8*Math.sin(ang-.4));
+      ctx.lineTo(x2-Math.cos(ang)*rr-8*Math.cos(ang+.4),y2-Math.sin(ang)*rr-8*Math.sin(ang+.4));
+      ctx.closePath();ctx.fill();
+    });
+    nodes.forEach(n=>{
+      if(n.hidden)return;
+      if(typeFilter&&n.type!==typeFilter)return;
+      if(search){
+        const s=search.toLowerCase();
+        if(!(n.label.toLowerCase().includes(s)||n.type.includes(s)||(n.url||"").toLowerCase().includes(s)))return;
+      }
+      const r=Math.max(6,Math.min(22,4+Math.log2(n.deg+1)*2.5));
+      const [x,y]=toScreen(n.x,n.y);
+      let a=1;
+      if(hoverSet)a=hoverSet.has(n.id)?1:.12;
+      if(selSet)a=selSet.has(n.id)?1:.18;
+      const col=TYPE_META[n.type]?.color||"#94a3b8";
+      if(n===hover||n===selected){
+        ctx.fillStyle=col+"33";
+        ctx.beginPath();ctx.arc(x,y,r+6,0,Math.PI*2);ctx.fill();
+      }
+      ctx.globalAlpha=a;
+      ctx.fillStyle=col;
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=col+"cc";ctx.lineWidth=1.5;ctx.stroke();
+      if(n.fixed){ctx.strokeStyle="#fff";ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r+3,0,Math.PI*2);ctx.stroke()}
+      if(zoom>.5||n===hover||n===selected||n.deg>3){
+        ctx.font="11px "+getComputedStyle(document.body).fontFamily;
+        ctx.fillStyle="#dbe7f5";
+        ctx.textAlign="center";ctx.textBaseline="top";
+        ctx.fillText(n.label.length>28?n.label.slice(0,25)+"…":n.label,x,y+r+4);
+      }
+      ctx.globalAlpha=1;
+    });
+    const visible=nodes.filter(n=>!n.hidden).length;
+    const visibleEdges=edges.filter(e=>{const a=nodeById.get(e.s),b=nodeById.get(e.t);return a&&!a.hidden&&b&&!b.hidden}).length;
+    $("#gStats").textContent=`nodes: ${visible} · edges: ${visibleEdges} · clusters: ${clusterKeys.length}`;
+  };
+  const loop=()=>{tick();render();requestAnimationFrame(loop)};
+  loop();
+  const fit=()=>{
+    const visible=nodes.filter(n=>!n.hidden);
+    if(!visible.length)return;
+    const xs=visible.map(n=>n.x),ys=visible.map(n=>n.y);
+    const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+    const w=maxX-minX+100,h2=maxY-minY+100;
+    zoom=Math.min(W/w,H/h2,.8);
+    panX=-(minX+maxX)/2*zoom;
+    panY=-(minY+maxY)/2*zoom;
+  };
+  fit();
+  canvas.addEventListener("mousedown",e=>{
+    const rect=canvas.getBoundingClientRect();
+    const n=nodeAt(e.clientX-rect.left,e.clientY-rect.top);
+    if(n){dragging=n;dragging.fixed=true;alpha=Math.max(alpha,.3)}
+    else{panning=true}
+    lastM={x:e.clientX,y:e.clientY};
+  });
+  canvas.addEventListener("mousemove",e=>{
+    const rect=canvas.getBoundingClientRect();
+    const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    if(dragging){
+      const [wx,wy]=fromScreen(mx,my);
+      dragging.x=wx;dragging.y=wy;
+    } else if(panning&&lastM){
+      panX+=e.clientX-lastM.x;panY+=e.clientY-lastM.y;
+      lastM={x:e.clientX,y:e.clientY};
+    } else {
+      const n=nodeAt(mx,my);
+      if(n!==hover){hover=n;canvas.style.cursor=n?"pointer":"grab"}
+    }
+  });
+  window.addEventListener("mouseup",()=>{
+    if(dragging){dragging.fixed=false;dragging=null}
+    panning=false;lastM=null;
+  });
+  canvas.addEventListener("wheel",e=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    const [wx,wy]=fromScreen(mx,my);
+    const factor=e.deltaY<0?1.15:1/1.15;
+    zoom=Math.max(.15,Math.min(4,zoom*factor));
+    panX=mx-W/2-wx*zoom;
+    panY=my-H/2-wy*zoom;
+  },{passive:false});
+  canvas.addEventListener("click",e=>{
+    const rect=canvas.getBoundingClientRect();
+    const n=nodeAt(e.clientX-rect.left,e.clientY-rect.top);
+    selected=n;
+    if(n){
+      const info=$("#nodeInfo");
+      info.style.display="block";
+      const connEdges=edges.filter(ed=>ed.s===n.id||ed.t===n.id);
+      info.innerHTML=`
+        <h4><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${TYPE_META[n.type]?.color||"#94a3b8"}"></i>${esc(n.label)}</h4>
+        <div class="dim">${TYPE_META[n.type]?.label||n.type} · ${n.deg} connections</div>
+        ${n.url?`<div style="margin-top:6px"><a href="${esc(n.url)}" target="_blank" rel="noopener">open ↗</a></div>`:""}
+        ${n.findings.length?`<div style="margin-top:8px"><b>Linked findings (${n.findings.length})</b><ul>${n.findings.slice(0,15).map(f=>`<li><span class="tag">${esc(f.kind)}</span> ${esc(f.title)}</li>`).join("")}</ul></div>`:""}
+        <div style="margin-top:8px"><b>Connections (${connEdges.length})</b>
+        <ul>${connEdges.slice(0,20).map(ed=>{
+          const other=nodeById.get(ed.s===n.id?ed.t:ed.s);
+          return`<li><span style="color:${EDGE_COLORS[ed.type]||"#94a3b8"}">${esc(ed.type)}</span> → ${esc(other?other.label:"?")}</li>`;
+        }).join("")}</ul></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn ghost" id="niHide">hide</button>
+          <button class="btn ghost" id="niFocus">focus 2-hop</button>
+          <button class="btn ghost" id="niPin">${n.fixed?"unpin":"pin"}</button>
+        </div>`;
+      $("#niHide").onclick=()=>{n.hidden=true;info.style.display="none"};
+      $("#niFocus").onclick=()=>{
+        const nbh=neighbors(n.id,2);
+        nodes.forEach(nn=>nn.hidden=!nbh.has(nn.id));
+      };
+      $("#niPin").onclick=()=>{n.fixed=!n.fixed;alpha=Math.max(alpha,.3);$("#niPin").textContent=n.fixed?"unpin":"pin"};
+    } else {
+      $("#nodeInfo").style.display="none";
+    }
+  });
+  canvas.addEventListener("contextmenu",e=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const n=nodeAt(e.clientX-rect.left,e.clientY-rect.top);
+    const m=$("#gMenu");
+    if(!n){m.style.display="none";return}
+    const items=[];
+    items.push(`<button data-a="open">open URL ↗</button>`);
+    items.push(`<button data-a="focus">focus 2-hop</button>`);
+    items.push(`<button data-a="hide">hide node</button>`);
+    items.push(`<button data-a="pin">${n.fixed?"unpin":"pin"}</button>`);
+    items.push(`<hr>`);
+    if(n.type==="person")items.push(`<button data-a="sweep">sweep handle</button>`);
+    if(n.type==="email")items.push(`<button data-a="emailintel">email intel</button>`);
+    if(n.type==="domain")items.push(`<button data-a="domain">resolve domain</button>`);
+    if(n.type==="ip")items.push(`<button data-a="ip">locate IP</button>`);
+    if(n.type==="service")items.push(`<button data-a="dossier">compile dossier</button>`);
+    items.push(`<button data-a="copyid">copy id</button>`);
+    m.innerHTML=items.join("");
+    m.style.left=e.clientX+"px";m.style.top=e.clientY+"px";
+    m.style.display="block";
+    $$("#gMenu button").forEach(b=>b.onclick=()=>{
+      m.style.display="none";
+      const a=b.dataset.a;
+      if(a==="open"&&n.url)window.open(n.url,"_blank");
+      if(a==="focus"){const nbh=neighbors(n.id,2);nodes.forEach(nn=>nn.hidden=!nbh.has(nn.id))}
+      if(a==="hide")n.hidden=true;
+      if(a==="pin")n.fixed=!n.fixed;
+      if(a==="copyid")copy(n.id);
+      if(a==="sweep")pivot("username",n.label.replace(/^@+/,"").split(":")[0]);
+      if(a==="emailintel")pivot("email",n.label);
+      if(a==="domain")pivot("domain",n.label);
+      if(a==="ip")pivot("ip",n.label);
+      if(a==="dossier")pivot("dossier",n.label.split(":").pop().trim().replace(/^@+/,""));
+    });
+  });
+  document.addEventListener("click",e=>{
+    if(!$("#gMenu").contains(e.target))$("#gMenu").style.display="none";
+  });
+  $("#gRelayout").onclick=()=>{alpha=1};
+  $("#gFit").onclick=fit;
+  $("#gReset").onclick=()=>{nodes.forEach(n=>{n.hidden=false;n.fixed=false});alpha=1;fit()};
+  $("#gToggleLeaves").onclick=()=>{
+    hideLeaves=!hideLeaves;
+    nodes.forEach(n=>{if(n.type==="finding")n.hidden=hideLeaves});
+    $("#gToggleLeaves").textContent=hideLeaves?"show leaves":"hide leaves";
+  };
+  $("#gSearch").oninput=e=>search=e.target.value;
+  $("#gFilterType").onclick=()=>{
+    const types=Object.keys(TYPE_META);
+    const cur=types.indexOf(typeFilter||"");
+    typeFilter=cur>=types.length-1?null:types[(cur+1)%types.length];
+    $("#gFilterType").textContent=typeFilter?TYPE_META[typeFilter].label:"all types";
+  };
+  const toGEXF=()=>{
+    let xml='<?xml version="1.0" encoding="UTF-8"?>\n<gexf xmlns="http://www.gexf.net/1.3" version="1.3">\n  <graph defaultedgetype="directed">\n';
+    xml+='    <attributes class="node"><attribute id="type" title="type" type="string"/><attribute id="url" title="url" type="string"/></attributes>\n';
+    xml+='    <nodes>\n';
+    nodes.forEach(n=>{
+      xml+=`      <node id="${esc(n.id)}" label="${esc(n.label)}">\n        <attvalues><attvalue for="type" value="${esc(n.type)}"/><attvalue for="url" value="${esc(n.url||"")}"/></attvalues>\n      </node>\n`;
+    });
+    xml+='    </nodes>\n    <edges>\n';
+    edges.forEach((e,i)=>{
+      xml+=`      <edge id="${i}" source="${esc(e.s)}" target="${esc(e.t)}" label="${esc(e.type)}" weight="${e.w||1}"/>\n`;
+    });
+    xml+='    </edges>\n  </graph>\n</gexf>';
+    return xml;
+  };
+  const toJSONLD=()=>{
+    const ctx={
+      "@context":{"schema":"http://schema.org/","osf":"https://osintforge.local/ontology#"},
+      "@graph":[]
+    };
+    nodes.forEach(n=>{
+      const o={"@id":n.id,"@type":`osf:${n.type}`,name:n.label};
+      if(n.url)o.url=n.url;
+      ctx["@graph"].push(o);
+    });
+    edges.forEach(e=>{
+      ctx["@graph"].push({"@type":`osf:${e.type}`,source:e.s,target:e.t,weight:e.w||1});
+    });
+    return JSON.stringify(ctx,null,2);
+  };
+  const dl=(name,content,type)=>{const b=new Blob([content],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click()};
+  $("#gExportGEXF").onclick=()=>dl(`osintforge_graph_${Date.now()}.gexf`,toGEXF(),"application/xml");
+  $("#gExportJSON").onclick=()=>dl(`osintforge_graph_${Date.now()}.jsonld`,toJSONLD(),"application/ld+json");
+  $("#gExportPNG").onclick=()=>{
+    const tmp=document.createElement("canvas");tmp.width=W*2;tmp.height=H*2;
+    const ctx=tmp.getContext("2d");
+    const saveZoom=zoom,savePanX=panX,savePanY=panY;
+    zoom*=2;panX*=2;panY*=2;
+    ctx.scale(2,2);
+    ctx.fillStyle="#05080f";ctx.fillRect(0,0,W,H);
+    edges.forEach(e=>{
+      const a=nodeById.get(e.s),b=nodeById.get(e.t);if(!a||!b||a.hidden||b.hidden)return;
+      const [x1,y1]=toScreen(a.x,a.y),[x2,y2]=toScreen(b.x,b.y);
+      ctx.strokeStyle=(EDGE_COLORS[e.type]||"#64748b")+"99";ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    });
+    nodes.forEach(n=>{
+      if(n.hidden)return;
+      const r=Math.max(6,Math.min(22,4+Math.log2(n.deg+1)*2.5));
+      const [x,y]=toScreen(n.x,n.y);
+      ctx.fillStyle=TYPE_META[n.type]?.color||"#94a3b8";
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#dbe7f5";ctx.font="11px sans-serif";ctx.textAlign="center";ctx.textBaseline="top";
+      ctx.fillText(n.label.slice(0,28),x,y+r+4);
+    });
+    zoom=saveZoom;panX=savePanX;panY=savePanY;
+    tmp.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`osintforge_graph_${Date.now()}.png`;a.click()});
+  };
+  window.addEventListener("resize",resize);
+}
+
+const API_SITES=[
+ {n:"GitHub",u:"https://api.github.com/users/{u}",p:u=>`https://github.com/${u}`,c:(s,t)=>s===200&&t.includes('"login"')},
+ {n:"GitLab",u:"https://gitlab.com/api/v4/users?username={u}",p:u=>`https://gitlab.com/${u}`,c:(s,t)=>s===200&&t.includes('"id"')},
+ {n:"Bitbucket",u:"https://api.bitbucket.org/2.0/users/{u}",p:u=>`https://bitbucket.org/${u}`,c:(s,t)=>s===200&&(t.includes('"nickname"')||t.includes('"account_id"'))},
+ {n:"Reddit",u:"https://www.reddit.com/user/{u}/about.json",p:u=>`https://www.reddit.com/user/${u}/`,c:(s,t)=>s===200&&t.includes('"t2"')},
+ {n:"Hacker News",u:"https://hacker-news.firebaseio.com/v0/user/{u}.json",p:u=>`https://news.ycombinator.com/user?id=${u}`,c:(s,t)=>s===200&&t.trim()!=="null"},
+ {n:"Mastodon",u:"https://mastodon.social/api/v1/accounts/lookup?acct={u}",p:u=>`https://mastodon.social/@${u}`,c:(s,t)=>s===200&&t.includes('"username"')},
+ {n:"Bluesky",u:"https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor={u}",p:u=>`https://bsky.app/profile/${u}.bsky.social`,c:(s,t)=>s===200&&t.includes('"did"')},
+ {n:"Wikipedia",u:"https://en.wikipedia.org/w/api.php?action=query&titles=User:{u}&format=json&origin=*",p:u=>`https://en.wikipedia.org/wiki/User:${u}`,c:(s,t)=>s===200&&!t.includes('"missing"')},
+ {n:"Trello",u:"https://trello.com/1/Members/{u}?fields=username,name,url,avatarUrl",p:u=>`https://trello.com/${u}`,c:(s,t)=>s===200&&t.includes('"username"')},
+ {n:"Lichess",u:"https://lichess.org/api/user/{u}",p:u=>`https://lichess.org/@/${u}`,c:(s,t)=>s===200&&t.includes('"id"')},
+ {n:"Chess.com",u:"https://api.chess.com/pub/player/{u}",p:u=>`https://www.chess.com/member/${u}`,c:(s,t)=>s===200&&t.includes('"player_id"'),x:u=>u.toLowerCase()},
+ {n:"Duolingo",u:"https://www.duolingo.com/2017-06-30/users?username={u}&fields=id,nickname",p:u=>`https://www.duolingo.com/profile/${u}`,c:(s,t)=>s===200&&t.includes('"nickname"')},
+ {n:"NPM",u:"https://registry.npmjs.org/-/user/org.couchdb.user:{u}",p:u=>`https://www.npmjs.com/~${u}`,c:(s,t)=>s===200&&t.includes('"_id"')},
+ {n:"Docker Hub",u:"https://hub.docker.com/v2/users/{u}/",p:u=>`https://hub.docker.com/u/${u}`,c:(s,t)=>s===200&&t.includes('"username"')},
+ {n:"Crates.io",u:"https://crates.io/api/v1/users/{u}",p:u=>`https://crates.io/users/${u}`,c:(s,t)=>s===200&&t.includes('"login"')},
+ {n:"Keybase",u:"https://keybase.io/_/api/1.0/user/lookup.json?usernames={u}",p:u=>`https://keybase.io/${u}`,c:(s,t)=>s===200&&t.includes('"profile"')},
+ {n:"Mixcloud",u:"https://api.mixcloud.com/{u}/",p:u=>`https://www.mixcloud.com/${u}/`,c:(s,t)=>s===200&&t.includes('"name"')},
+ {n:"Scratch",u:"https://api.scratch.mit.edu/users/{u}",p:u=>`https://scratch.mit.edu/users/${u}`,c:(s,t)=>s===200&&t.includes('"username"')},
+ {n:"Lemmy.world",u:"https://lemmy.world/api/v3/user?username={u}",p:u=>`https://lemmy.world/u/${u}`,c:(s,t)=>s===200&&t.includes('"person"')},
+];
+const PROBE_SITES=[
+ {n:"Gravatar",u:"https://en.gravatar.com/{u}",m:"status",p:u=>`https://gravatar.com/${u}`},
+ {n:"Medium",u:"https://medium.com/@{u}",m:"status",p:u=>`https://medium.com/@${u}`},
+ {n:"Dev.to",u:"https://dev.to/{u}",m:"status",p:u=>`https://dev.to/${u}`},
+ {n:"YouTube",u:"https://www.youtube.com/@{u}",m:"status",p:u=>`https://www.youtube.com/@${u}`},
+ {n:"Pinterest",u:"https://www.pinterest.com/{u}/",m:"status",p:u=>`https://www.pinterest.com/${u}/`},
+ {n:"Tumblr",u:"https://{u}.tumblr.com/",m:"status",raw:1,p:u=>`https://${u}.tumblr.com/`},
+ {n:"TikTok",u:"https://www.tiktok.com/@{u}",m:"absent",rx:"[Cc]ouldn.t find this account|account doesn.t exist",p:u=>`https://www.tiktok.com/@${u}`},
+ {n:"Telegram",u:"https://t.me/{u}",m:"present",rx:"tg://resolve",p:u=>`https://t.me/${u}`},
+ {n:"Steam",u:"https://steamcommunity.com/id/{u}",m:"absent",rx:"could not be found",p:u=>`https://steamcommunity.com/id/${u}`},
+ {n:"Last.fm",u:"https://www.last.fm/user/{u}",m:"status",p:u=>`https://www.last.fm/user/${u}`},
+ {n:"About.me",u:"https://about.me/{u}",m:"status",p:u=>`https://about.me/${u}`},
+ {n:"SoundCloud",u:"https://soundcloud.com/{u}",m:"status",p:u=>`https://soundcloud.com/${u}`},
+ {n:"Bandcamp",u:"https://{u}.bandcamp.com/",m:"status",raw:1,p:u=>`https://${u}.bandcamp.com/`},
+ {n:"Vimeo",u:"https://vimeo.com/{u}",m:"status",p:u=>`https://vimeo.com/${u}`},
+ {n:"Twitch",u:"https://www.twitch.tv/{u}",m:"absent",rx:"Sorry. Unless",p:u=>`https://www.twitch.tv/${u}`},
+ {n:"PyPI",u:"https://pypi.org/user/{u}/",m:"status",p:u=>`https://pypi.org/user/${u}/`},
+ {n:"Substack",u:"https://{u}.substack.com/",m:"status",raw:1,p:u=>`https://${u}.substack.com/`},
+ {n:"Kickstarter",u:"https://www.kickstarter.com/profile/{u}",m:"status",p:u=>`https://www.kickstarter.com/profile/${u}`},
+ {n:"BuyMeACoffee",u:"https://www.buymeacoffee.com/{u}",m:"status",p:u=>`https://www.buymeacoffee.com/${u}`},
+ {n:"Patreon",u:"https://www.patreon.com/{u}",m:"status",p:u=>`https://www.patreon.com/${u}`},
+ {n:"Wattpad",u:"https://www.wattpad.com/user/{u}",m:"status",p:u=>`https://www.wattpad.com/user/${u}`},
+ {n:"Cash App",u:"https://cash.app/{u}",m:"status",raw:1,p:u=>`https://cash.app/${u}`},
+];
+PROBE_SITES.forEach(s=>{
+  if(s.m==="status")s.c=(st)=>st===200;
+  else if(s.m==="absent")s.c=(st,t)=>st===200&&!new RegExp(s.rx).test(t);
+  else s.c=(st,t)=>st===200&&new RegExp(s.rx).test(t);
+});
+const LINK_SITES=[["X / Twitter",u=>`https://x.com/${u}`],["Instagram",u=>`https://instagram.com/${u}`],["Facebook",u=>`https://facebook.com/${u}`],["LinkedIn",u=>`https://linkedin.com/in/${u}`],["Snapchat",u=>`https://snapchat.com/add/${u}`],["Threads",u=>`https://www.threads.net/@${u}`],["Spotify",u=>`https://open.spotify.com/search/${u}`],["Strava",u=>`https://www.strava.com/athletes/${u}`],["Letterboxd",u=>`https://letterboxd.com/${u}`],["Flickr",u=>`https://www.flickr.com/people/${u}`],["Tinder",u=>`https://tinder.com/@${u}`],["OnlyFans",u=>`https://onlyfans.com/${u}`]];
+function viewUsername(){
+  $("#view").innerHTML=`
+  <div class="card">
+    <h2>Username Sweep</h2>
+    <p class="sub">Probes ${API_SITES.length} CORS-native APIs + ${PROBE_SITES.length} relay probes (direct→relay fallback each), then surfaces login-walled platforms for manual verification.</p>
+    <div class="row"><input id="uq" class="grow mono" placeholder="username (without @)"><button class="btn prime" id="uRun">▶ Run Sweep</button></div>
+    <div class="progline"><i id="uBar"></i></div>
+    <p class="dim" id="uStat" style="margin-top:8px;font-size:12px"></p>
+  </div>
+  <div class="card" id="uRes" style="display:none">
+    <h2>Results <span class="pill" id="uCount"></span> <span class="spacer"></span><button class="btn ghost" id="uDossier">📁 Compile dossier</button><button class="btn ghost" id="uGraph">🕸️ View graph</button></h2>
+    <h3>Confirmed / Probable Accounts</h3><div class="grid" id="uGrid"></div>
+    <h3>Manual Verification (login-walled)</h3><div class="chips" id="uLinks"></div>
+    <h3>Findings Log</h3><div id="uTable"></div>
+  </div>`;
+  $("#uq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#uRun").click()});
+  const pv=takePivot("username");if(pv){$("#uq").value=pv}
+  $("#uDossier").onclick=()=>pivot("dossier",$("#uq").value.trim().replace(/^@/,""));
+  $("#uGraph").onclick=()=>go("graph");
+  $("#uRun").onclick=async()=>{
+    const u=$("#uq").value.trim().replace(/^@/,"");
+    if(!u)return toast("Enter a username","err");
+    audit("username_sweep",u);busy(true);
+    const all=[...API_SITES,...PROBE_SITES];
+    $("#uRes").style.display="block";$("#uGrid").innerHTML="";
+    const slots={};
+    all.forEach(s=>{const d=document.createElement("div");d.className="site";d.innerHTML=`<b title="${esc(s.n)}">${esc(s.n)}</b><span class="st st-pend">QUEUED</span>`;$("#uGrid").appendChild(d);slots[s.n]=d});
+    let done=0;const found=[],log=[];
+    $("#uBar").style.width="3%";
+    await poolMap(all,async s=>{
+      const el=slots[s.n];el.querySelector(".st").className="st st-run";el.querySelector(".st").textContent="SCAN";
+      const uu=(s.x?s.x(u):u);
+      const target=s.u.replace("{u}",s.raw?uu:encodeURIComponent(uu));
+      const st=await apiProbe(target,s.c);
+      const url=s.p?s.p(uu):"";
+      const sp=el.querySelector(".st");
+      sp.className="st st-"+st;sp.textContent=st==="hit"?"FOUND":st==="err"?"ERROR":"NONE";
+      if(st==="hit"){el.classList.add("hit");el.onclick=()=>window.open(url,"_blank");el.style.cursor="pointer";found.push({s,url});
+        log.push({kind:"profile",title:`${s.n}: @${uu}`,url,detail:"public profile responds",confidence:"med"});
+        addFinding({module:"username",kind:"profile",title:`${s.n}: @${uu}`,url,detail:"public profile responds",confidence:"med"});}
+      done++;$("#uBar").style.width=Math.round(done/all.length*100)+"%";
+      $("#uStat").textContent=`${done}/${all.length} probed · ${found.length} found`;
+    },state.conc);
+    $("#uCount").textContent=`${found.length} hits / ${all.length}`;
+    $("#uLinks").innerHTML=LINK_SITES.map(([n,f])=>`<a href="${esc(f(u))}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("");
+    $("#uTable").innerHTML=findingsTable(log);
+    setProg(100);busy(false);
+    toast(`Sweep complete: ${found.length} account(s) found`,found.length?"ok":"");
+  };
+  if(pv)$("#uRun").click();
+}
+
+const stripHtml=s=>String(s||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();
+const DOS=[
+ {n:"GitHub",f:async u=>{const j=await smartJSON(`https://api.github.com/users/${encodeURIComponent(u)}`);if(!j||!j.login)return null;return{avatar:j.avatar_url,name:j.name,bio:j.bio,loc:j.location,created:j.created_at,links:[j.blog,j.html_url,j.twitter_username?`https://x.com/${j.twitter_username}`:null].filter(Boolean),stats:{followers:j.followers,repos:j.public_repos},email:j.email||null}}},
+ {n:"GitLab",f:async u=>{const j=await smartJSON(`https://gitlab.com/api/v4/users?username=${encodeURIComponent(u)}`);if(!j||!j[0])return null;const d=j[0];return{avatar:d.avatar_url,name:d.name,links:[d.web_url].filter(Boolean),created:d.created_at,stats:{}}}},
+ {n:"Reddit",f:async u=>{const j=await smartJSON(`https://www.reddit.com/user/${encodeURIComponent(u)}/about.json`);const d=j&&j.data;if(!d)return null;return{avatar:d.icon_img||null,name:null,bio:d.subreddit&&d.subreddit.public_description||null,created:new Date((d.created_utc||0)*1000).toISOString(),links:[`https://www.reddit.com/user/${u}/`],stats:{karma:(d.link_karma||0)+(d.comment_karma||0)}}}},
+ {n:"Hacker News",f:async u=>{const j=await smartJSON(`https://hacker-news.firebaseio.com/v0/user/${encodeURIComponent(u)}.json`);if(!j)return null;return{created:new Date((j.created||0)*1000).toISOString(),links:[`https://news.ycombinator.com/user?id=${u}`],stats:{karma:j.karma},about:j.about?stripHtml(j.about):null}}},
+ {n:"Bluesky",f:async u=>{const j=await smartJSON(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(u+".bsky.social")}`);if(!j||!j.did)return null;return{avatar:j.avatar,name:j.displayName,bio:j.description,created:j.createdAt,links:[`https://bsky.app/profile/${u}.bsky.social`],stats:{followers:j.followersCount}}}},
+ {n:"Mastodon",f:async u=>{const j=await smartJSON(`https://mastodon.social/api/v1/accounts/lookup?acct=${encodeURIComponent(u)}`);if(!j||!j.username)return null;return{avatar:j.avatar,name:j.display_name,bio:stripHtml(j.note),created:j.created_at,links:[j.url].filter(Boolean),stats:{followers:j.followers_count}}}},
+ {n:"Lichess",f:async u=>{const j=await smartJSON(`https://lichess.org/api/user/${encodeURIComponent(u)}`);if(!j||!j.id)return null;return{name:j.title?`${j.title} ${j.username}`:null,bio:j.profile&&j.profile.bio,loc:j.profile&&j.profile.location,created:j.createdAt?new Date(j.createdAt).toISOString():null,links:[`https://lichess.org/@/${u}`],stats:{}}}},
+ {n:"Chess.com",f:async u=>{const j=await smartJSON(`https://api.chess.com/pub/player/${encodeURIComponent(u.toLowerCase())}`);if(!j||!j.player_id)return null;return{avatar:j.avatar,name:j.name,loc:j.location,created:j.joined?new Date(j.joined*1000).toISOString():null,links:[`https://www.chess.com/member/${u}`],stats:{followers:j.followers}}}},
+ {n:"Duolingo",f:async u=>{const j=await smartJSON(`https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(u)}&fields=id,nickname,picture`);const d=j&&(j.users&&j.users[0]);if(!d)return null;return{avatar:d.picture,name:d.nickname,links:[`https://www.duolingo.com/profile/${u}`],stats:{}}}},
+ {n:"NPM",f:async u=>{const j=await smartJSON(`https://registry.npmjs.org/-/user/org.couchdb.user:${encodeURIComponent(u)}`);if(!j||!j._id)return null;return{email:j.email||null,links:[`https://www.npmjs.com/~${u}`],stats:{}}}},
+ {n:"Keybase",f:async u=>{const j=await smartJSON(`https://keybase.io/_/api/1.0/user/lookup.json?usernames=${encodeURIComponent(u)}`);const d=j&&j.them&&j.them[0];if(!d||!d.profile)return null;const p=d.profile;return{avatar:d.pictures&&d.pictures.primary&&d.pictures.primary.url,name:p.full_name,bio:p.bio,loc:p.location,links:[`https://keybase.io/${u}`],stats:{}}}},
+ {n:"Trello",f:async u=>{const j=await smartJSON(`https://trello.com/1/Members/${encodeURIComponent(u)}?fields=username,name,url,avatarUrl`);if(!j||!j.username)return null;return{avatar:(j.avatarUrl||"")+"170.png",name:j.name,links:[j.url],stats:{}}}},
+ {n:"Scratch",f:async u=>{const j=await smartJSON(`https://api.scratch.mit.edu/users/${encodeURIComponent(u)}`);if(!j||!j.username)return null;return{avatar:j.profile&&j.profile.image,bio:j.profile&&j.profile.bio,loc:j.profile&&j.profile.country,created:j.history&&j.history.joined,links:[`https://scratch.mit.edu/users/${u}`],stats:{}}}},
+];
+function viewDossier(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Dossier Compiler</h2>
+    <p class="sub">Pulls normalized public identity fields from ${DOS.length} APIs, merges them into one profile graph, scores cross-source name agreement.</p>
+    <div class="row"><input id="doq" class="grow mono" placeholder="username / handle"><button class="btn prime" id="doRun">▶ Compile</button></div>
+  </div><div id="doOut"></div>`;
+  $("#doq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#doRun").click()});
+  const pv=takePivot("dossier");if(pv)$("#doq").value=pv;
+  $("#doRun").onclick=async()=>{
+    const u=$("#doq").value.trim().replace(/^@/,"");if(!u)return toast("Enter a handle","err");
+    audit("dossier",u);busy(true);setProg(10);
+    const hits=await poolMap(DOS,async s=>{try{return{s,r:await s.f(u)}}catch(e){return{s,r:null}}},state.conc);
+    const got=hits.filter(h=>h.r).map(h=>({site:h.s.n,...h.r}));
+    setProg(70);
+    if(!got.length){$("#doOut").innerHTML=`<div class="card"><p class="dim">No compilable public profiles for @${esc(u)}.</p></div>`;busy(false);return}
+    const names={};got.forEach(g=>(g.name||"").trim()&&(names[g.name.trim()]=(names[g.name.trim()]||0)+1));
+    const topName=Object.entries(names).sort((a,b)=>b[1]-a[1])[0];
+    const locs=[...new Set(got.map(g=>g.loc).filter(Boolean))];
+    const bios=[...new Set(got.map(g=>g.bio).filter(Boolean))];
+    const emails=[...new Set(got.map(g=>g.email).filter(Boolean))];
+    const links=[...new Set(got.flatMap(g=>g.links||[]))];
+    const avatars=[...new Set(got.map(g=>g.avatar).filter(a=>a&&a.startsWith("http")))];
+    const created=got.map(g=>g.created).filter(Boolean).sort();
+    const agree=topName?topName[1]/got.length:0;
+    const confScore=Math.round(Math.min(1,got.length/DOS.length)*60+agree*40);
+    const log=[
+      {kind:"dossier_summary",title:`@${u} — ${got.length}/${DOS.length} sources compiled`,url:"",detail:`consistency score ${confScore}/100 · name agreement ${(agree*100)|0}%`,confidence:confScore>60?"high":"med"},
+      ...topName?[{kind:"canonical_name",title:`Likely real name: ${topName[0]}`,url:"",detail:`seen on ${topName[1]} source(s)`,confidence:topName[1]>1?"high":"med"}]:[],
+      ...locs.map(l=>({kind:"location",title:`Location: ${l}`,url:"",detail:"",confidence:"med"})),
+      ...emails.map(e=>({kind:"email_exposed",title:`Public email: ${e}`,url:"",detail:"self-published on a public API",confidence:"high"})),
+      ...got.map(g=>({kind:"source_"+g.site.toLowerCase(),title:`${g.site}: ${g.name||"@"+u}`,url:(g.links||[])[0]||"",detail:[g.bio&&g.bio.slice(0,140),g.loc,g.created&&"joined "+g.created.slice(0,10)].filter(Boolean).join(" · "),confidence:"high"})),
+    ];
+    log.forEach(f=>addFinding({module:"dossier",...f}));
+    $("#doOut").innerHTML=`
+    <div class="card"><h2>Identity Graph — @${esc(u)} <span class="pill ${confScore>60?"ok":""}">score ${confScore}/100</span></h2>
+      <div class="kv">
+        <div class="cell"><small>Likely name</small><div class="v">${esc(topName?topName[0]:"—")}</div></div>
+        <div class="cell"><small>Locations</small><div class="v">${esc(locs.join(" · ")||"—")}</div></div>
+        <div class="cell"><small>Public emails</small><div class="v">${esc(emails.join(" · ")||"—")}</div></div>
+        <div class="cell"><small>Earliest account</small><div class="v">${esc(created[0]?created[0].slice(0,10):"—")}</div></div>
+      </div>
+      ${avatars.length?`<h3>Avatars (${avatars.length}) — click to reverse-image</h3><div class="thumbs">${avatars.map(a=>`<img src="${esc(a)}" data-a="${esc(a)}" onerror="this.remove()">`).join("")}</div>`:""}
+      ${bios.length?`<h3>Bios</h3><div class="chips">${bios.slice(0,6).map(b=>`<span>${esc(b.slice(0,140))}</span>`).join("")}</div>`:""}
+      <h3>Link graph</h3><div class="chips">${links.map(l=>`<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l.replace(/^https?:\/\//,"").slice(0,48))} ↗</a>`).join("")}</div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" id="doSweep">🔁 Sweep this handle</button>
+        <button class="btn" id="doGraph">🕸️ View graph</button>
+        ${emails[0]?`<button class="btn" id="doMail">✉️ Email intel on ${esc(emails[0])}</button>`:""}
+        <button class="btn ghost" id="doExport">⬇ Export dossier JSON</button>
+      </div>
+    </div>
+    <div class="card"><h2>Findings <span class="pill">${log.length}</span></h2>${findingsTable(log)}</div>`;
+    $$("#doOut .thumbs img").forEach(im=>im.onclick=()=>pivot("image",im.dataset.a));
+    $("#doSweep").onclick=()=>pivot("username",u);
+    $("#doGraph").onclick=()=>go("graph");
+    if(emails[0])$("#doMail").onclick=()=>pivot("email",emails[0]);
+    $("#doExport").onclick=()=>{const b=new Blob([JSON.stringify({handle:u,compiled:new Date().toISOString(),sources:got},null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`dossier_${u}.json`;a.click()};
+    setProg(100);busy(false);toast(`Dossier compiled: ${got.length} sources`,"ok");
+  };
+  if(pv)$("#doRun").click();
+}
+
+const DISPOSABLE=["mailinator.com","tempmail.com","temp-mail.org","guerrillamail.com","10minutemail.com","yopmail.com","sharklasers.com","getnada.com","dispostable.com","fakeinbox.com","throwawaymail.com","maildrop.cc","mintemail.com","spamgourmet.com","mytemp.email","tmpmail.org"];
+function viewEmail(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Email Intel</h2>
+    <p class="sub">Gravatar identity graph + avatar hashing, GitHub commit attribution, Proton HKP key disclosure, domain mail-health (MX/SPF/DMARC via DoH), disposable-domain detection, permutations, defensive breach link-outs.</p>
+    <div class="row"><input id="eq" class="grow mono" placeholder="name@example.com"><input id="eName" style="width:180px" placeholder="first last (optional)"><button class="btn prime" id="eRun">▶ Investigate</button></div>
+  </div><div id="eOut"></div>`;
+  $("#eq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#eRun").click()});
+  const pv=takePivot("email");if(pv)$("#eq").value=pv;
+  $("#eRun").onclick=async()=>{
+    const email=$("#eq").value.trim().toLowerCase(),name=$("#eName").value.trim();
+    if(!email.includes("@"))return toast("Enter a valid email","err");
+    audit("email_intel",email);busy(true);setProg(8);
+    const log=[],dom=email.split("@")[1]||"";
+    const h=md5(email);
+    log.push({kind:"hash",title:`Gravatar MD5: ${h}`,url:"",detail:"interop hash for gravatar / NCII hash lists",confidence:"high"});
+    if(DISPOSABLE.includes(dom))log.push({kind:"disposable_domain",title:`${dom} is a disposable/burner domain`,url:"",detail:"identity assurance low",confidence:"high"});
+    const doh=t=>smartJSON(`https://dns.google/resolve?name=${encodeURIComponent(dom)}&type=${t}`);
+    const mx=await doh("MX");setProg(22);
+    log.push((mx&&mx.Answer&&mx.Answer.length)?{kind:"mx",title:`MX alive: ${mx.Answer.slice(0,3).map(a=>a.data).join(", ")}`,url:"",detail:"domain accepts mail",confidence:"high"}:{kind:"mx",title:`No MX records for ${dom}`,url:"",detail:"domain likely cannot receive mail",confidence:"high"});
+    const spf=await doh("TXT");setProg(32);
+    const spfRec=(spf&&spf.Answer||[]).find(a=>/v=spf1/i.test(a.data));
+    if(spfRec)log.push({kind:"spf",title:`SPF: ${spfRec.data.replace(/"/g,"").slice(0,120)}`,url:"",detail:/[-~]?all/.test(spfRec.data)?"publishes sending policy":"policy present",confidence:"med"});
+    const dm=await smartJSON(`https://dns.google/resolve?name=${encodeURIComponent("_dmarc."+dom)}&type=TXT`);
+    const dmRec=(dm&&dm.Answer||[]).find(a=>/DMARC1/i.test(a.data));
+    if(dmRec)log.push({kind:"dmarc",title:`DMARC: ${dmRec.data.replace(/"/g,"").slice(0,120)}`,url:"",detail:"",confidence:"med"});
+    const g=await smartJSON(`https://en.gravatar.com/${h}.json`);setProg(48);
+    if(g&&g.entry){const e=g.entry[0];
+      log.push({kind:"gravatar",title:`Gravatar profile: ${e.displayName||email}`,url:e.profileUrl||"",detail:"public identity hub",confidence:"high"});
+      (e.accounts||[]).slice(0,20).forEach(a=>log.push({kind:"linked_account",title:`${a.shortname||"service"}: ${a.username||""}`,url:a.url||"",detail:"verified linked service on gravatar",confidence:"high"}));
+      (e.emails||[]).forEach(x=>log.push({kind:"alt_email",title:`Alternate email: ${x.value}`,url:"",detail:"self-disclosed on gravatar",confidence:"high"}));
+    }
+    let avatarHashed=false;
+    try{
+      const im=await loadImg(`https://www.gravatar.com/avatar/${h}?d=404&s=128`);
+      const hs=imgHashes(im);avatarHashed=true;
+      log.push({kind:"avatar",title:"Gravatar avatar exists (d=404 probe)",url:`https://www.gravatar.com/avatar/${h}`,detail:`aHash ${hs.ahash} · pHash ${hs.phash}`,confidence:"high"});
+      state.vault.push({id:Date.now(),name:`avatar:${email}`,src:thumb(im),sha:"",...hs,ts:new Date().toISOString()});
+      LS.set("osf_vault",state.vault);
+      window.__avatarUrl=`https://www.gravatar.com/avatar/${h}`;
+    }catch(e){}
+    const gh=await smartJSON(`https://api.github.com/search/commits?q=author-email:${encodeURIComponent(email)}`);setProg(64);
+    if(gh&&gh.total_count){
+      const logins=[...new Set((gh.items||[]).map(i=>i.author&&i.author.login).filter(Boolean))];
+      log.push({kind:"github_attribution",title:`GitHub account(s): ${logins.join(", ")||"see search"}`,url:`https://github.com/search?q=author-email%3A${encodeURIComponent(email)}`,detail:`${gh.total_count} public commit(s) authored with this email`,confidence:"high"});
+      logins.forEach(l=>addFinding({module:"username",kind:"derived_username",title:`Derived handle: ${l}`,url:`https://github.com/${l}`,detail:"from email commit attribution",confidence:"high"}));
+    }
+    if(/proton\.me$|protonmail\.com$/.test(dom)){
+      try{const r=await smartFetch(`https://api.protonmail.ch/pks/lookup?op=get&search=${encodeURIComponent(email)}`);
+        if((r.text||"").includes("BEGIN PGP PUBLIC KEY"))log.push({kind:"pgp",title:"Public PGP key published (Proton HKP)",url:`https://api.protonmail.ch/pks/lookup?op=get&search=${encodeURIComponent(email)}`,detail:"key existence confirms account presence at lookup time",confidence:"high"});
+      }catch(e){}
+    }
+    if(name){
+      const parts=name.toLowerCase().split(/\s+/),f=parts[0],l=parts[parts.length-1];
+      const pats=[`${f}.${l}`,`${f}${l}`,`${f[0]}${l}`,`${f}_${l}`,`${f}.${l[0]}`,`${l}${f}`,`${f}-${l}`,`${f}${l[0]}`];
+      const perms=[...new Set(pats.flatMap(p=>["gmail.com","outlook.com","yahoo.com","proton.me"].map(d=>`${p}@${d}`)))];
+      log.push({kind:"permutations",title:`${perms.length} candidate addresses generated`,url:"",detail:perms.slice(0,10).join(" · ")+" …",confidence:"low"});
+    }
+    const lp=email.split("@")[0];
+    const handles=[...new Set([lp,lp.replace(/[._-]+/g,""),...lp.split(/[._-]+/).filter(x=>x.length>2)])].slice(0,6);
+    log.push({kind:"derived_handles",title:`Handle candidates: ${handles.join(", ")}`,url:"",detail:"from local-part segmentation",confidence:"med"});
+    log.push({kind:"email_exposed",title:`Target email: ${email}`,url:"",detail:"input email added as entity",confidence:"high"});
+    log.push({kind:"breach_check",title:"HaveIBeenPwned (manual)",url:`https://haveibeenpwned.com/account/${encodeURIComponent(email)}`,detail:"defensive breach lookup",confidence:"low"});
+    log.push({kind:"breach_check",title:"Firefox Monitor",url:`https://monitor.firefox.com/`,detail:"breach notification service",confidence:"low"});
+    log.forEach(f=>addFinding({module:"email",...f}));
+    $("#eOut").innerHTML=`<div class="card"><h2>Findings <span class="pill">${log.length}</span> <span class="spacer"></span><button class="btn ghost" id="eGraph">🕸️ View graph</button></h2>
+      <div class="row" style="margin-bottom:10px">${handles.slice(0,4).map(hd=>`<button class="btn ghost" data-p="${esc(hd)}">🔁 sweep “${esc(hd)}”</button>`).join("")}${avatarHashed?`<button class="btn ghost" id="eRev">🖼 reverse-image avatar</button>`:""}</div>
+      ${findingsTable(log)}</div>`;
+    $$("#eOut [data-p]").forEach(b=>b.onclick=()=>pivot("username",b.dataset.p));
+    if(avatarHashed&&window.__avatarUrl)$("#eRev").onclick=()=>pivot("image",window.__avatarUrl);
+    $("#eGraph").onclick=()=>go("graph");
+    setProg(100);busy(false);toast("Email intel complete","ok");
+  };
+  if(pv)$("#eRun").click();
+}
+
+function liveImageSearch(url,push,setP){
+  return (async()=>{
+    try{
+      const y=await smartFetch("https://yandex.com/images/search?rpt=imageview&url="+encodeURIComponent(url),{timeout:25000});
+      const t=(y.text||"").replace(/&quot;/g,'"');
+      (t.match(/"url":"(https?:\/\/[^"]+)"/g)||[]).map(m=>m.slice(7,-1)).filter(m=>!/yandex|yastatic|data:/.test(m)).slice(0,20).forEach(m=>push("yandex_hit","Yandex source-page candidate",m,"low"));
+    }catch(e){}
+    setP&&setP(45);
+    try{
+      const b=await smartFetch("https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIVSP&sbisrc=UrlPaste&q=imgurl:"+encodeURIComponent(url),{timeout:25000});
+      const t=(b.text||"").replace(/&quot;/g,'"');
+      (t.match(/"murl":"(https?:\/\/[^"]+)"/g)||[]).map(m=>m.slice(8,-1)).slice(0,20).forEach(m=>push("bing_match","Bing visually-similar image",m,"low"));
+      (t.match(/"purl":"(https?:\/\/[^"]+)"/g)||[]).map(m=>m.slice(8,-1)).slice(0,20).forEach(m=>push("bing_page","Bing hosting-page candidate",m,"low"));
+    }catch(e){}
+    setP&&setP(70);
+    try{
+      const k=await relayGet("http://karmadecay.com/search?q="+encodeURIComponent(url));
+      const ids=[...new Set((k.text||"").match(/\/comments\/[a-z0-9]+\/[^"'\s]*/g)||[])].slice(0,10);
+      ids.forEach(p=>push("reddit_repost","Reddit repost candidate (KarmaDecay)","https://www.reddit.com"+p,"med"));
+    }catch(e){}
+  })();
+}
+function viewImage(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Reverse Image & Fingerprints</h2>
+    <p class="sub">SHA-256 + in-browser EXIF + perceptual hashes (aHash/dHash/pHash). Live scrapes: Yandex, Bing, KarmaDecay.</p>
+    <div class="drop" id="drop">📁 Drag & drop an image, or click<input type="file" id="file" accept="image/*" hidden></div>
+    <div class="row" style="margin-top:12px"><input id="iurl" class="grow mono" placeholder="…or paste image URL"><button class="btn prime" id="iRun">▶ Analyze</button></div>
+    <label class="dim" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px"><input type="checkbox" id="iHost" style="width:auto"> auto-host local files to enable live engine search</label>
+  </div>
+  <div class="card" id="iHash" style="display:none"><h2>Fingerprints & Metadata</h2><div id="iKv"></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="iVault">🗄 Add to similarity vault</button><button class="btn ghost" id="iRev">🔎 run live search</button><button class="btn ghost" id="iGraph">🕸️ View graph</button></div>
+  </div>
+  <div class="card" id="iMatch" style="display:none"><h2>Vault Similarity Match <span class="pill" id="iMCount"></span></h2><div id="iMTable"></div></div>
+  <div class="card" id="iEng" style="display:none"><h2>Search Engines</h2><div class="dorkgrid" id="iLinks"></div></div>
+  <div class="card" id="iLive" style="display:none"><h2>Live Engine Scrapes <span class="pill">via relay</span></h2><div id="iRes"></div></div>
+  <div class="card"><h2>Similarity Vault <span class="pill" id="vCount"></span> <span class="spacer"></span><button class="btn ghost" id="vClear">clear</button></h2>
+    <p class="sub">Persisted locally. Matching uses Hamming distance over pHash/dHash/aHash.</p>
+    <div class="drop" id="vDrop" style="padding:14px">＋ ingest images into vault<input type="file" id="vFile" accept="image/*" multiple hidden></div>
+    <div class="thumbs" id="vGrid"></div>
+  </div>`;
+  const drop=$("#drop"),file=$("#file");
+  drop.onclick=()=>file.click();
+  drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
+  drop.ondragleave=()=>drop.classList.remove("over");
+  drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");if(e.dataTransfer.files[0])analyzeFile(e.dataTransfer.files[0])};
+  file.onchange=()=>file.files[0]&&analyzeFile(file.files[0]);
+  $("#iRun").onclick=()=>{const u=$("#iurl").value.trim();if(u)analyzeUrl(u);else toast("Paste an image URL","err")};
+  $("#iGraph").onclick=()=>go("graph");
+  const pv=takePivot("image");if(pv){$("#iurl").value=pv}
+  let CURRENT=null;
+  function renderVault(){
+    $("#vCount").textContent=state.vault.length+" images";
+    $("#vGrid").innerHTML=state.vault.map(v=>`<img src="${v.src}" title="${esc(v.name)}\npHash ${v.phash||""}" >`).join("")||'<p class="dim">vault empty</p>';
+  }
+  $("#vClear").onclick=()=>{state.vault=[];LS.set("osf_vault",[]);renderVault();toast("Vault cleared")};
+  const vDrop=$("#vDrop"),vFile=$("#vFile");
+  vDrop.onclick=()=>vFile.click();
+  vDrop.ondragover=e=>{e.preventDefault();vDrop.classList.add("over")};
+  vDrop.ondragleave=()=>vDrop.classList.remove("over");
+  vDrop.ondrop=e=>{e.preventDefault();vDrop.classList.remove("over");[...e.dataTransfer.files].forEach(ingest)};
+  vFile.onchange=()=>[...vFile.files].forEach(ingest);
+  async function ingest(f){
+    try{
+      const im=await loadImg(URL.createObjectURL(f));
+      const hs=imgHashes(im);
+      const buf=await f.arrayBuffer();
+      const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",buf))).map(b=>b.toString(16).padStart(2,"0")).join("");
+      state.vault.push({id:Date.now()+Math.random(),name:f.name,src:thumb(im),sha,...hs,ts:new Date().toISOString()});
+      LS.set("osf_vault",state.vault);renderVault();toast(`Vault +1: ${f.name}`,"ok");
+    }catch(e){toast("Ingest failed: "+f.name,"err")}
+  }
+  function matchVault(hs){
+    if(!hs||!state.vault.length)return[];
+    return state.vault.map(v=>{
+      const sp=simPct(hs.phash,v.phash),sd=simPct(hs.dhash,v.dhash),sa=simPct(hs.ahash,v.ahash);
+      return{v,sp,sd,sa,overall:Math.round((sp*2+sd+sa)/4)};
+    }).sort((a,b)=>b.overall-a.overall);
+  }
+  function showMatches(hs){
+    const m=matchVault(hs).filter(x=>x.overall>55);
+    $("#iMCount").textContent=m.length+" candidate(s)";
+    $("#iMatch").style.display="block";
+    $("#iMTable").innerHTML=m.length?`<table><thead><tr><th>Thumb</th><th>Name</th><th>pHash</th><th>dHash</th><th>aHash</th><th>Overall</th></tr></thead><tbody>${
+      m.slice(0,20).map(x=>`<tr><td><img src="${x.v.src}" style="width:44px;height:44px;object-fit:cover;border-radius:6px"></td><td>${esc(x.v.name)}</td><td class="mono">${x.sp}%</td><td class="mono">${x.sd}%</td><td class="mono">${x.sa}%</td><td><div class="meter"><i style="width:${x.overall}%;background:${x.overall>88?"var(--acc2)":x.overall>70?"var(--warn)":"var(--dim)"}"></i></div><span class="mono" style="font-size:10px">${x.overall}%</span></td></tr>`).join("")
+    }</tbody></table>`:'<p class="dim">No vault entry above 55% similarity.</p>';
+  }
+  function enginesCard(url){
+    const e=encodeURIComponent(url||"");
+    const eng=[["Google Lens",`https://lens.google.com/uploadbyurl?url=${e}`,"visual matches"],["Yandex Reverse",`https://yandex.com/images/search?rpt=imageview&url=${e}`,"strong for faces/places"],["Bing Visual",`https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIVSP&sbisrc=UrlPaste&q=imgurl:${e}`,"similar images"],["TinEye",`https://tineye.com/search?url=${e}`,"exact-origin tracker"],["Baidu",`https://graph.baidu.com/upload?tn=pc&image=${e}`,"CN coverage"]];
+    $("#iEng").style.display="block";
+    $("#iLinks").innerHTML=eng.map(([n,u,d])=>`<a href="${u}" target="_blank" rel="noopener">${esc(n)} ↗<small>${d}</small></a>`).join("");
+  }
+  function runLive(url){
+    $("#iLive").style.display="block";$("#iRes").innerHTML='<p class="dim"><span class="spin"></span> scraping Yandex / Bing / KarmaDecay…</p>';
+    const log=[];const seen=new Set();
+    const push=(kind,title,u,conf)=>{if(u&&!seen.has(u)){seen.add(u);log.push({kind,title,url:u,detail:"",confidence:conf});addFinding({module:"image",kind,title,url:u,detail:"",confidence:conf})}};
+    liveImageSearch(url,push).then(()=>{
+      $("#iRes").innerHTML=log.length?findingsTable(log):'<p class="dim">Engines returned no parseable hits — use direct engine links above.</p>';
+      setProg(100);busy(false);
+    });
+  }
+  $("#iRev").onclick=()=>{const u=CURRENT&&(CURRENT.url||CURRENT.hosted);if(u)runLive(u);else toast("No hosted URL","err")};
+  $("#iVault").onclick=async()=>{if(!CURRENT)return toast("Nothing analyzed yet","err");
+    if(CURRENT.src){state.vault.push({id:Date.now(),name:CURRENT.name,src:CURRENT.src,sha:CURRENT.sha||"",...(CURRENT.hs||{}),ts:new Date().toISOString()});LS.set("osf_vault",state.vault);renderVault();toast("Added to vault","ok")}
+    else toast("No local thumbnail (remote CORS-blocked)","err")};
+  async function analyzeFile(f){
+    audit("image_file",f.name);busy(true);setProg(12);
+    const buf=await f.arrayBuffer();
+    const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",buf))).map(b=>b.toString(16).padStart(2,"0")).join("");
+    const kv=[["SHA-256",sha],["size / type",`${f.size} B · ${f.type||"?"}`]];
+    const ex=parseEXIF(buf);
+    if(ex){
+      if(ex.make||ex.model)kv.push(["camera",`${ex.make||""} ${ex.model||""}`.trim()]);
+      if(ex.software)kv.push(["software",ex.software]);
+      if(ex.taken||ex.datetime)kv.push(["taken / edited",`${ex.taken||""} / ${ex.datetime||""}`]);
+      if(ex.gps){kv.push(["GPS (EXIF)",`${ex.gps.lat}, ${ex.gps.lon}`]);addFinding({module:"image",kind:"exif_gps",title:`GPS in ${f.name}: ${ex.gps.lat},${ex.gps.lon}`,url:`https://www.openstreetmap.org/?mlat=${ex.gps.lat}&mlon=${ex.gps.lon}#map=15/${ex.gps.lat}/${ex.gps.lon}`,detail:"device location",confidence:"high"})}
+      if(ex.make||ex.model)addFinding({module:"image",kind:"exif_device",title:`Device: ${(ex.make||"")+" "+(ex.model||"")}`.trim(),url:"",detail:f.name,confidence:"med"});
+    } else kv.push(["EXIF","none / stripped"]);
+    let im=null,hs=null,src=null;
+    try{im=await loadImg(URL.createObjectURL(f));hs=imgHashes(im);src=thumb(im);
+      kv.push(["aHash",hs.ahash],["dHash",hs.dhash],["pHash",hs.phash]);
+    }catch(e){kv.push(["perceptual","hash failed"])}
+    CURRENT={sha,hs,src,name:f.name,url:null};
+    $("#iHash").style.display="block";$("#iKv").innerHTML=kvHTML(kv);
+    if(hs)showMatches(hs);
+    (hs?[{kind:"fingerprint",title:`pHash ${hs.phash}`,url:"",detail:`a ${hs.ahash} · d ${hs.dhash}`,confidence:"high"}]:[]).forEach(x=>addFinding({module:"image",...x}));
+    if($("#iHost").checked){
+      toast("Hosting image for live engine search…");
+      const hu=await hostImage(f);
+      if(hu){CURRENT.hosted=hu;CURRENT.url=hu;enginesCard(hu);runLive(hu);toast("Hosted: "+hu,"ok")}
+      else{enginesCard("");toast("Hosting failed","err");busy(false);setProg(100)}
+    } else {enginesCard("");setProg(100);busy(false)}
+    renderVault();
+  }
+  async function analyzeUrl(url){
+    audit("image_url",url);busy(true);setProg(10);
+    const kv=[["source",url]];let hs=null,src=null,ex=null;
+    try{const r=await fetch(url,{signal:sigT(12000)});const buf=await r.arrayBuffer();ex=parseEXIF(buf);
+      if(ex&&ex.gps){kv.push(["GPS (EXIF)",`${ex.gps.lat}, ${ex.gps.lon}`]);addFinding({module:"image",kind:"exif_gps",title:`GPS: ${ex.gps.lat},${ex.gps.lon}`,url:`https://www.openstreetmap.org/?mlat=${ex.gps.lat}&mlon=${ex.gps.lon}`,detail:url,confidence:"high"})}
+      if(ex&&(ex.make||ex.model))kv.push(["camera",`${ex.make||""} ${ex.model||""}`.trim()]);
+    }catch(e){kv.push(["EXIF","remote bytes unavailable (CORS)"])}
+    try{const im=await loadImg(url);hs=imgHashes(im);src=thumb(im);kv.push(["aHash",hs.ahash],["dHash",hs.dhash],["pHash",hs.phash])}
+    catch(e){kv.push(["perceptual","remote canvas CORS-blocked"])}
+    CURRENT={sha:"",hs,src,name:url.split("/").pop().slice(0,40),url};
+    $("#iHash").style.display="block";$("#iKv").innerHTML=kvHTML(kv);
+    if(hs)showMatches(hs);
+    enginesCard(url);runLive(url);renderVault();
+  }
+  renderVault();
+  if(pv)$("#iRun").click();
+}
+
+function viewReddit(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Reddit Deep Dive</h2>
+    <p class="sub">Account analytics, field-syntax search, community discovery, reverse image via exact <span class="mono">url:"…"</span> queries.</p>
+    <div class="row">
+      <select id="rMode"><option value="dive">👤 Account dive</option><option value="search">🔎 Content search</option><option value="img">🖼 Reverse image</option><option value="topic">🧭 Topic discovery</option></select>
+      <input id="rIn" class="grow mono" placeholder="username / query / image URL / topic">
+      <input id="rSub" style="width:150px" placeholder="r/subreddit (opt)">
+      <button class="btn prime" id="rRun">▶ Run</button>
+    </div>
+  </div><div id="rOut"></div>`;
+  $("#rIn").addEventListener("keydown",e=>{if(e.key==="Enter")$("#rRun").click()});
+  const rj=async(p,q={})=>{const qs=new URLSearchParams({limit:100,...q});
+    try{const r=await fetch(`https://www.reddit.com${p}.json?${qs}`,{signal:sigT(16000)});if(r.ok)return await r.json()}catch(e){}
+    return await smartJSON(`https://www.reddit.com${p}.json?${qs}`)};
+  const postRow=c=>({kind:"post",title:`r/${c.subreddit} · ${(c.title||"").slice(0,95)}`,url:`https://www.reddit.com${c.permalink}`,detail:`score=${c.score} · ${c.num_comments}c · u/${c.author}`,confidence:"med"});
+  const finish=extra=>{
+    $("#rOut").innerHTML=extra+`<div class="card"><h2>Findings <span class="pill">${dedupe(window.__rlog||[]).length}</span></h2>${findingsTable(window.__rlog||[])}</div>`;
+    (window.__rlog||[]).forEach(f=>addFinding({module:"reddit",...f}));
+    setProg(100);busy(false);toast("Reddit complete","ok");
+  };
+  $("#rRun").onclick=async()=>{
+    const mode=$("#rMode").value,q=$("#rIn").value.trim(),sub=$("#rSub").value.trim().replace(/^r\//,"");
+    if(!q)return toast("Enter a target","err");
+    audit("reddit_"+mode,q);busy(true);setProg(8);
+    let log=[];window.__rlog=log;
+    if(mode==="dive"){
+      const u=q.replace(/^@/,"").replace(/^u\//,"");
+      const about=await rj(`/user/${u}/about`,{limit:1});setProg(25);
+      if(!about||!about.data)return finish(`<div class="card"><p class="dim">No public account for u/${esc(u)}.</p></div>`);
+      const d=about.data;
+      log.push({kind:"account",title:`u/${u}`,url:`https://www.reddit.com/user/${u}/`,detail:`created ${new Date(d.created_utc*1000).toISOString().slice(0,10)} · karma ${(d.link_karma||0)+(d.comment_karma||0)}`,confidence:"high"});
+      if(d.icon_img)log.push({kind:"avatar",title:"Profile avatar",url:d.icon_img,detail:"pivot to Reverse Image to trace reuse",confidence:"high"});
+      const [posts,comms]=await Promise.all([rj(`/user/${u}/submitted`,{limit:100}),rj(`/user/${u}/comments`,{limit:100})]);setProg(60);
+      const items=[...(posts?.data?.children||[]),...(comms?.data?.children||[])].map(c=>c.data);
+      if(!items.length)return finish("");
+      const subs={},hours=new Array(24).fill(0),imgs=[],emails=new Set(),mu={};let scored=[];
+      items.forEach(c=>{
+        subs[c.subreddit]=(subs[c.subreddit]||0)+1;
+        hours[new Date(c.created_utc*1000).getUTCHours()]++;
+        const txt=(c.selftext||c.body||"")+" "+(c.title||c.link_title||"");
+        (txt.match(/\bu\/[A-Za-z0-9_-]{3,}/g)||[]).forEach(m=>mu[m]=(mu[m]||0)+1);
+        (txt.match(/[\w.+-]+@[\w-]+\.[\w.]+/g)||[]).forEach(e=>emails.add(e));
+        if(c.url&&/^https?:/.test(c.url)&&(/\.(jpe?g|png|gif|webp)$/i.test(c.url)||/i\.redd\.it|imgur/.test(c.url)))imgs.push({u:c.url,t:(c.title||"").slice(0,60),p:`https://www.reddit.com${c.permalink||""}`});
+        if(c.permalink)scored.push([c.score||0,c.title||"(comment)",c.subreddit,`https://www.reddit.com${c.permalink}`]);
+      });
+      const lo=Math.min(...items.map(c=>c.created_utc)),hi=Math.max(...items.map(c=>c.created_utc));
+      log.push({kind:"activity_window",title:`Activity ${new Date(lo*1000).toISOString().slice(0,10)} → ${new Date(hi*1000).toISOString().slice(0,10)}`,url:"",detail:`${items.length} items`,confidence:"high"});
+      const topSubs=Object.entries(subs).sort((a,b)=>b[1]-a[1]).slice(0,12);
+      const peak=hours.map((v,h)=>[v,h]).sort((a,b)=>b[0]-a[0]).slice(0,5).map(([v,h])=>`${String(h).padStart(2,"0")}h×${v}`).join(" · ");
+      log.push({kind:"temporal_pattern",title:"Peak hours (TZ heuristic)",url:"",detail:peak,confidence:"med"});
+      emails.forEach(e=>log.push({kind:"self_disclosed_pii",title:`Email self-disclosed: ${e}`,url:"",detail:"public post body",confidence:"high"}));
+      Object.entries(mu).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([m,v])=>log.push({kind:"association",title:`Mentions ${m} ×${v}`,url:`https://www.reddit.com/user/${m.slice(2)}/`,detail:"",confidence:"med"}));
+      scored.sort((a,b)=>b[0]-a[0]).slice(0,5).forEach(([s,t,su,p])=>log.push({kind:"top_post",title:`r/${su} · ${t.slice(0,85)}`,url:p,detail:`score=${s}`,confidence:"med"}));
+      const bars=Math.max(...hours,1);
+      const extra=`<div class="card"><h2>u/${esc(u)} — Analytics</h2>
+        <h3>Community footprint</h3><div class="chips">${topSubs.map(([s,v])=>`<span>r/${esc(s)} <b>×${v}</b></span>`).join("")}</div>
+        <h3>Posting hours (UTC)</h3><div class="bars">${hours.map((v,h)=>`<div style="height:${Math.max(4,v/bars*100)}%" title="${h}:00 UTC — ${v}"></div>`).join("")}</div>
+        <h3>Media posted (${imgs.length})</h3><div class="thumbs">${imgs.slice(0,24).map(i=>`<a href="${esc(i.p)}" target="_blank" rel="noopener" title="${esc(i.t)}"><img src="${esc(i.u)}" onerror="this.remove()"></a>`).join("")||'<p class="dim">none</p>'}</div></div>`;
+      imgs.slice(0,24).forEach(i=>log.push({kind:"user_image",title:i.t,url:i.u,detail:`thread ${i.p}`,confidence:"high"}));
+      return finish(extra);
+    }
+    if(mode==="search"){
+      const d=sub?await rj(`/r/${sub}/search`,{q,sort:"relevance",t:"all",type:"link",limit:60,restrict_sr:1}):await rj("/search",{q,sort:"relevance",t:"all",type:"link",limit:60});
+      (d?.data?.children||[]).forEach(c=>log.push(postRow(c.data)));
+    }
+    if(mode==="img"){
+      for(const v of [q,q.replace(/^https?:\/\//,"")]){
+        const d=await rj("/search",{q:`url:"${v}"`,type:"link",limit:25});
+        (d?.data?.children||[]).forEach(c=>log.push(postRow(c.data)));setProg(40);
+      }
+      const fn=q.split("/").pop().split("?")[0];
+      if(fn){const d2=await rj("/search",{q:`"${fn}"`,type:"link",limit:25});(d2?.data?.children||[]).forEach(c=>log.push(postRow(c.data)))}
+    }
+    if(mode==="topic"){
+      const sr=await smartJSON(`https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(q)}&limit=12`);
+      (sr?.data?.children||[]).forEach(c=>{const d=c.data;log.push({kind:"community",title:`r/${d.display_name} (${(d.subscribers||0).toLocaleString()} subs)`,url:`https://www.reddit.com${d.url}`,detail:(d.public_description||"").slice(0,160),confidence:"med"})});
+      const d=await rj(sub?`/r/${sub}/search`:"/search",{q,sort:"top",t:"year",type:"link",limit:20,...(sub?{restrict_sr:1}:{})});
+      (d?.data?.children||[]).forEach(c=>log.push(postRow(c.data)));
+    }
+    finish("");
+  };
+}
+
+function viewMeta(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>People Search / Meta Search</h2>
+    <p class="sub">Dork matrix across engines/regions + live DuckDuckGo and Bing scrapes through the relay.</p>
+    <div class="row"><input id="mName" style="width:190px" placeholder="Full name"><input id="mCity" style="width:140px" placeholder="City"><input id="mUser" class="mono" style="width:150px" placeholder="username"><input id="mMail" class="mono" style="width:200px" placeholder="email"><button class="btn prime" id="mRun">▶ Build & Search</button></div>
+  </div>
+  <div class="card" id="mDorks" style="display:none"><h2>Dork Matrix</h2><div class="dorkgrid" id="mGrid"></div></div>
+  <div class="card" id="mLive" style="display:none"><h2>Live Results <span class="pill">DDG + Bing via relay</span></h2><div id="mRes"></div></div>`;
+  $("#mRun").onclick=async()=>{
+    const n=$("#mName").value.trim(),c=$("#mCity").value.trim(),u=$("#mUser").value.trim(),e=$("#mMail").value.trim();
+    if(!n&&!u&&!e)return toast("Provide at least one selector","err");
+    audit("meta_search",n||u||e);busy(true);setProg(10);
+    const base=n?`"${n}"`:(u?`"${u}"`:`"${e}"`);
+    const dorks=[["core",base]];
+    if(n){dorks.push(["profile/resume",`"${n}" (profile OR resume OR contact OR interview)`]);if(c)dorks.push(["geo",`"${n}" "${c}"`]);
+      dorks.push(["linkedin",`site:linkedin.com/in "${n}"`],["facebook",`site:facebook.com "${n}"`],["instagram",`site:instagram.com "${n}"`],["docs",`"${n}" filetype:pdf OR filetype:docx`]);}
+    if(u){dorks.push(["handle",`"${u}" (username OR account OR profile)`],["communities",`(site:reddit.com OR site:github.com OR site:t.me OR site:discord.com) "${u}"`],["pastes",`(site:pastebin.com OR site:ghostbin.com OR site:hastebin.com) "${u}"`]);}
+    if(e)dorks.push(["exact email",`"${e}"`],["email+leaks",`"${e}" (leak OR breach OR dump OR paste)`]);
+    dorks.push(["public dirs",`intitle:"index of" (${u||n||e})`],["buckets",`(site:s3.amazonaws.com OR site:storage.googleapis.com OR site:blob.core.windows.net) (${u||n||e})`],["repos",`(site:github.com OR site:gitlab.com) (${u||n||e})`]);
+    const engines=[["Google",q=>`https://www.google.com/search?q=${q}`],["Bing",q=>`https://www.bing.com/search?q=${q}`],["Yandex",q=>`https://yandex.com/search/?text=${q}`],["DDG",q=>`https://duckduckgo.com/?q=${q}`],["Startpage",q=>`https://www.startpage.com/sp/search?query=${q}`],["Baidu",q=>`https://www.baidu.com/s?wd=${q}`]];
+    $("#mDorks").style.display="block";
+    $("#mGrid").innerHTML=dorks.flatMap(([lab,q])=>engines.slice(0,3).map(([nm,f])=>`<a href="${f(encodeURIComponent(q))}" target="_blank" rel="noopener">${esc(nm)}: ${esc(lab)} ↗<small>${esc(q)}</small></a>`)).join("");
+    $("#mLive").style.display="block";$("#mRes").innerHTML='<p class="dim"><span class="spin"></span> scraping DDG + Bing…</p>';
+    const seen=new Set(),rows=[];
+    const qs=dorks.slice(0,3).map(d=>d[1]);
+    for(const q of qs){
+      try{
+        const r=await relayGet(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`);
+        const re=/class="result__a" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;let m;
+        while((m=re.exec(r.text))&&rows.length<30){
+          let href=m[1];const um=href.match(/uddg=([^&]+)/);if(um)href=decodeURIComponent(um[1]);else if(href.startsWith("//"))href="https:"+href;
+          const title=m[2].replace(/<[^>]+>/g,"").trim();
+          if(!seen.has(href)){seen.add(href);rows.push({kind:"web_mention",title:title.slice(0,110),url:href,detail:`DDG · ${q}`,confidence:"med"})}
+        }
+      }catch(err){}
+      try{
+        const b=await relayGet(`https://www.bing.com/search?q=${encodeURIComponent(q)}&count=20`);
+        const re2=/<li class="b_algo"[^>]*>[\s\S]*?<a href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/g;let m2;
+        while((m2=re2.exec(b.text))&&rows.length<45){
+          const title=m2[2].replace(/<[^>]+>/g,"").trim();
+          if(!seen.has(m2[1])){seen.add(m2[1]);rows.push({kind:"web_mention",title:title.slice(0,110),url:m2[1],detail:`Bing · ${q}`,confidence:"med"})}
+        }
+      }catch(err){}
+      setProg(30+rows.length);
+    }
+    rows.forEach(f=>addFinding({module:"meta_search",...f}));
+    $("#mRes").innerHTML=rows.length?findingsTable(rows):'<p class="dim">Relays returned nothing — use the dork matrix manually.</p>';
+    setProg(100);busy(false);toast("People search built","ok");
+  };
+}
+
+function viewDomain(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Domain / DNS / CT / Wayback</h2>
+    <p class="sub">RDAP + DoH records, certificate-transparency subdomain enumeration (crt.sh), and Wayback CDX recon: historical subdomains, sensitive-file discovery, snapshot deep-fetch.</p>
+    <div class="row"><input id="dq" class="grow mono" placeholder="example.com"><button class="btn prime" id="dRun">▶ Resolve</button></div>
+    <div class="tabs"><button data-t="dns" class="on">RDAP / DNS</button><button data-t="ct">CT Subdomains</button><button data-t="wb">Wayback Recon</button></div>
+  </div><div id="dOut"></div>`;
+  $("#dq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#dRun").click()});
+  let tab="dns";
+  $$("#view .tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;$$("#view .tabs button").forEach(x=>x.classList.toggle("on",x===b));if(window.__lastDom)run(window.__lastDom)});
+  async function run(d){
+    window.__lastDom=d;
+    if(tab==="dns")return runDns(d);
+    if(tab==="ct")return runCt(d);
+    return runWb(d);
+  }
+  async function runDns(d){
+    audit("domain",d);busy(true);setProg(15);
+    const rd=await smartJSON(`https://rdap.org/domain/${d}`);setProg(40);
+    const log=[];
+    if(rd&&rd.events){
+      const ev=Object.fromEntries((rd.events||[]).map(e=>[e.eventAction,e.eventDate]));
+      const reg=(rd.entities||[]).find(e=>(e.roles||[]).includes("registrar"));
+      const regName=reg?((reg.vcardArray&&reg.vcardArray[1]&&(reg.vcardArray[1].find(v=>v[0]==="fn")||[])[3])||reg.handle||""):"";
+      log.push({kind:"whois_rdap",title:`${d} — registrar ${regName}`,url:`https://rdap.org/domain/${d}`,detail:`registered ${ev.registration||"?"} · expires ${ev.expiration||"?"}`,confidence:"high"});
+      (rd.nameservers||[]).forEach(ns=>log.push({kind:"nameserver",title:ns.ldhName||"",url:"",detail:"",confidence:"high"}));
+    }
+    for(const t of ["A","AAAA","MX","NS","TXT","CNAME","SOA","CAA"]){
+      const j=await smartJSON(`https://dns.google/resolve?name=${d}&type=${t}`);
+      (j?.Answer||[]).forEach(a=>log.push({kind:"dns_"+t,title:a.data.replace(/\.$/,""),url:"",detail:`TTL ${a.TTL}s`,confidence:"high"}));
+      setProg(45+["A","AAAA","MX","NS","TXT","CNAME","SOA","CAA"].indexOf(t)*6);
+    }
+    log.push({kind:"passive_dns",title:"SecurityTrails / ViewDNS (manual)",url:`https://securitytrails.com/domain/${d}/dns`,detail:"",confidence:"low"});
+    log.forEach(f=>addFinding({module:"domain",...f}));
+    $("#dOut").innerHTML=`<div class="card"><h2>Findings <span class="pill">${log.length}</span></h2>${findingsTable(log)}</div>`;
+    setProg(100);busy(false);toast("DNS intel complete","ok");
+  }
+  async function runCt(d){
+    audit("ct",d);busy(true);setProg(20);
+    $("#dOut").innerHTML='<div class="card"><p class="dim"><span class="spin"></span> querying crt.sh (can take ~20s)…</p></div>';
+    const r=await smartFetch(`https://crt.sh/?q=%25.${encodeURIComponent(d)}&output=json`,{timeout:40000});
+    let j=[];try{j=JSON.parse(r.text)}catch(e){}
+    if(!j.length){try{const r2=await smartFetch(`https://crt.sh/?q=${encodeURIComponent(d)}&output=json`,{timeout:40000});j=JSON.parse(r2.text)}catch(e){}}
+    setProg(70);
+    const subs={};let log=[];
+    (j||[]).forEach(c=>{(c.name_value||"").split("\n").forEach(s=>{s=s.replace(/^\*\./,"").trim();if(s&&s.endsWith(d)&&s!==d)subs[s]=(subs[s]||0)+1})});
+    const list=Object.entries(subs).sort((a,b)=>b[1]-a[1]);
+    list.slice(0,150).forEach(([s,c])=>log.push({kind:"ct_subdomain",title:s,url:`https://${s}/`,detail:`in ${c} cert(s)`,confidence:"high"}));
+    log.push({kind:"ct_summary",title:`${list.length} unique subdomains from ${(j||[]).length} certificates`,url:`https://crt.sh/?q=%25.${d}`,detail:"",confidence:"high"});
+    log.forEach(f=>addFinding({module:"domain",...f}));
+    $("#dOut").innerHTML=`<div class="card"><h2>CT Subdomains <span class="pill">${list.length}</span> <span class="spacer"></span><button class="btn ghost" id="ctCopy">⧉ copy list</button></h2>${findingsTable(log.slice(0,150))}</div>`;
+    $("#ctCopy").onclick=()=>copy(list.map(x=>x[0]).join("\n"));
+    setProg(100);busy(false);toast(`CT: ${list.length} subdomains`,"ok");
+  }
+  async function runWb(d){
+    audit("wayback",d);busy(true);setProg(15);
+    $("#dOut").innerHTML='<div class="card"><p class="dim"><span class="spin"></span> querying Wayback CDX…</p></div>';
+    const r=await smartFetch(`https://web.archive.org/cdx/search/cdx?url=*.${encodeURIComponent(d)}/*&output=json&fl=original,mimetype,timestamp&collapse=urlkey&limit=2000&filter=statuscode:200`,{timeout:40000});
+    let j=[];try{j=JSON.parse(r.text).slice(1)}catch(e){}
+    setProg(45);
+    const subs=new Set(),files=[];
+    const EXT=/\.(env|sql|bak|zip|tar\.gz|tgz|xlsx?|docx?|pdf|ya?ml|json|conf|ini|log|csv|key|pem|old|orig)(\?|$)/i;
+    (j||[]).forEach(row=>{const u=row[0]||"";try{const h=new URL(u).hostname;if(h.endsWith(d)&&h!==d)subs.add(h)}catch(e){}
+      if(EXT.test(u)&&files.length<120)files.push(u)});
+    let log=[{kind:"wb_summary",title:`${(j||[]).length} collapsed snapshots · ${subs.size} historical subdomains · ${files.length} sensitive-file candidates`,url:`https://web.archive.org/web/*/${d}/*`,detail:"",confidence:"high"}];
+    [...subs].slice(0,100).forEach(s=>log.push({kind:"wb_subdomain",title:s,url:`https://${s}/`,detail:"historical",confidence:"med"}));
+    files.forEach(f=>log.push({kind:"wb_file",title:f.split("/").pop().slice(0,60),url:f,detail:"archived sensitive-file candidate",confidence:"med"}));
+    const pages=(j||[]).filter(row=>(row[1]||"").includes("html")).filter((_,i)=>i%Math.max(1,Math.floor((j||[]).length/4))===0).slice(0,4);
+    for(const row of pages){
+      try{
+        const snap=`https://web.archive.org/web/${row[2]}id_/${row[0]}`;
+        const pr=await relayGet(snap);const t=pr.text||"";
+        (t.match(/[\w.+-]+@[\w-]+\.[\w.]+/g)||[]).slice(0,15).forEach(em=>log.push({kind:"wb_email",title:`Archived email: ${em}`,url:snap,detail:`snapshot ${row[2]}`,confidence:"med"}));
+        (t.match(/AKIA[0-9A-Z]{16}/g)||[]).forEach(k=>log.push({kind:"wb_secret",title:`AWS key id ${k}`,url:snap,detail:"exposed credential in archive",confidence:"high"}));
+        (t.match(/gh[pousr]_[A-Za-z0-9]{20,}/g)||[]).forEach(k=>log.push({kind:"wb_secret",title:"GitHub token in archive",url:snap,detail:k.slice(0,8)+"…",confidence:"high"}));
+      }catch(e){}
+      setProg(60+pages.indexOf(row)*9);
+    }
+    log.forEach(f=>addFinding({module:"domain",...f}));
+    $("#dOut").innerHTML=`<div class="card"><h2>Wayback Recon <span class="pill">${log.length}</span> <span class="spacer"></span><button class="btn ghost" id="wbCopy">⧉ copy subdomains</button></h2>${findingsTable(log)}</div>`;
+    $("#wbCopy").onclick=()=>copy([...subs].join("\n"));
+    setProg(100);busy(false);toast("Wayback recon complete","ok");
+  }
+  $("#dRun").onclick=()=>{
+    const d=$("#dq").value.trim().toLowerCase().replace(/^https?:\/\//,"").split("/")[0];
+    if(!d.includes("."))return toast("Enter a domain","err");
+    run(d);
+  };
+}
+
+function viewIp(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>IP Intel</h2><p class="sub">ipinfo.io geo/ASN/anonymization + reverse DNS (PTR via DoH) + investigation link-outs.</p>
+  <div class="row"><input id="pq" class="grow mono" placeholder="1.2.3.4"><button class="btn prime" id="pRun">▶ Locate</button></div></div><div id="pOut"></div>`;
+  $("#pq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#pRun").click()});
+  $("#pRun").onclick=async()=>{
+    const ip=$("#pq").value.trim();
+    if(!/^[0-9a-fA-F.:]+$/.test(ip))return toast("Enter an IP address","err");
+    audit("ip",ip);busy(true);setProg(30);
+    const j=await smartJSON(`https://ipinfo.io/${ip}/json`);
+    const log=[];
+    if(j&&j.country){
+      log.push({kind:"geo",title:`${ip} → ${j.city||"?"}, ${j.region||""}, ${j.country}`,url:`https://ipinfo.io/${ip}`,detail:`${j.org||""} · ${j.hostname||""}`,confidence:"high"});
+      if(j.loc)log.push({kind:"map",title:`Map: ${j.loc}`,url:`https://www.openstreetmap.org/?mlat=${j.loc.split(",")[0]}&mlon=${j.loc.split(",")[1]}#map=12/${j.loc}`,detail:"",confidence:"med"});
+      if(j.privacy)log.push({kind:"privacy",title:`VPN=${j.privacy.vpn} Proxy=${j.privacy.proxy} Tor=${j.privacy.tor} Hosting=${j.privacy.hosting}`,url:"",detail:"",confidence:"high"});
+    }
+    if(/^\d+\.\d+\.\d+\.\d+$/.test(ip)){
+      const rev=ip.split(".").reverse().join(".")+".in-addr.arpa";
+      const p=await smartJSON(`https://dns.google/resolve?name=${rev}&type=PTR`);
+      (p?.Answer||[]).forEach(a=>log.push({kind:"ptr",title:`PTR: ${a.data.replace(/\.$/,"")}`,url:"",detail:"reverse DNS",confidence:"high"}));
+    }
+    log.push({kind:"shodan",title:"Shodan host view",url:`https://www.shodan.io/host/${ip}`,detail:"",confidence:"low"});
+    log.push({kind:"greynoise",title:"GreyNoise",url:`https://viz.greynoise.io/ip/${ip}`,detail:"",confidence:"low"});
+    log.push({kind:"abuse",title:"AbuseIPDB",url:`https://www.abuseipdb.com/check/${ip}`,detail:"",confidence:"low"});
+    log.push({kind:"virustotal",title:"VirusTotal IP",url:`https://www.virustotal.com/gui/ip-address/${ip}`,detail:"",confidence:"low"});
+    log.push({kind:"bgp",title:"BGP.HE",url:`https://bgp.he.net/ip/${ip}`,detail:"",confidence:"low"});
+    log.forEach(f=>addFinding({module:"ip",...f}));
+    $("#pOut").innerHTML=`<div class="card"><h2>Findings <span class="pill">${log.length}</span></h2>${findingsTable(log)}</div>`;
+    setProg(100);busy(false);toast("IP intel complete","ok");
+  };
+}
+
+const CC={"971":"AE","972":"IL","973":"BH","974":"QA","975":"BT","976":"MN","977":"NP","992":"TJ","993":"TM","994":"AZ","995":"GE","996":"KG","998":"UZ","880":"BD","855":"KH","856":"LA","852":"HK","853":"MO","850":"KP","81":"JP","82":"KR","84":"VN","86":"CN","90":"TR","91":"IN","92":"PK","93":"AF","94":"LK","95":"MM","98":"IR","60":"MY","61":"AU","62":"ID","63":"PH","64":"NZ","65":"SG","66":"TH","40":"RO","41":"CH","43":"AT","44":"UK","45":"DK","46":"SE","47":"NO","48":"PL","49":"DE","30":"GR","31":"NL","32":"BE","33":"FR","34":"ES","36":"HU","39":"IT","351":"PT","352":"LU","353":"IE","354":"IS","355":"AL","358":"FI","359":"BG","370":"LT","371":"LV","372":"EE","373":"MD","374":"AM","375":"BY","380":"UA","381":"RS","385":"HR","386":"SI","387":"BA","389":"MK","420":"CZ","421":"SK","212":"MA","213":"DZ","216":"TN","218":"LY","220":"GM","221":"SN","223":"ML","225":"CI","226":"BF","227":"NE","228":"TG","229":"BJ","230":"MU","231":"LR","232":"SL","233":"GH","234":"NG","235":"TD","237":"CM","238":"CV","240":"GQ","241":"GA","242":"CG","243":"CD","244":"AO","249":"SD","250":"RW","251":"ET","252":"SO","253":"DJ","254":"KE","255":"TZ","256":"UG","257":"BI","258":"MZ","260":"ZM","261":"MG","262":"RE","263":"ZW","264":"NA","265":"MW","266":"LS","267":"BW","268":"SZ","269":"KM","27":"ZA","20":"EG","501":"BZ","502":"GT","503":"SV","504":"HN","505":"NI","506":"CR","507":"PA","509":"HT","51":"PE","52":"MX","53":"CU","54":"AR","55":"BR","56":"CL","57":"CO","58":"VE","591":"BO","592":"GY","593":"EC","595":"PY","597":"SR","598":"UY","7":"RU/KZ","1":"US/CA"};
+function viewPhone(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>Phone Parse</h2><p class="sub">E.164 validation + country attribution; carrier/line-type link-outs.</p>
+  <div class="row"><input id="hq" class="grow mono" placeholder="+49 151 23456789"><button class="btn prime" id="hRun">▶ Parse</button></div></div><div id="hOut"></div>`;
+  $("#hq").addEventListener("keydown",e=>{if(e.key==="Enter")$("#hRun").click()});
+  $("#hRun").onclick=()=>{
+    const raw=$("#hq").value.trim();const digits=raw.replace(/[^\d+]/g,"");
+    if(digits.replace("+","").length<7)return toast("Number too short","err");
+    audit("phone",digits);busy(true);setProg(40);
+    const body=digits.replace(/^\+/,"");let cc="unknown",rest=body;
+    for(const L of [3,2,1]){const p=body.slice(0,L);if(CC[p]){cc=CC[p];rest=body.slice(L);break}}
+    const log=[
+      {kind:"parse",title:"+"+body,url:"",detail:`country=${cc} · national=${rest} · valid E.164=${body.length>=7&&body.length<=15}`,confidence:cc!=="unknown"?"high":"low"},
+      {kind:"carrier_lookup",title:"NumVerify (needs API key)",url:"https://numverify.com/",detail:"carrier + line-type",confidence:"low"},
+      {kind:"carrier_lookup",title:"FreeCarrierLookup",url:`https://freecarrierlookup.com/`,detail:"line-type (manual)",confidence:"low"},
+      {kind:"manual",title:"TrueCaller lookup",url:`https://www.truecaller.com/search/${cc==="US/CA"?"us":"global"}/${body}`,detail:"crowd-sourced ID (ToS applies)",confidence:"low"},
+    ];
+    log.forEach(f=>addFinding({module:"phone",...f}));
+    $("#hOut").innerHTML=`<div class="card"><h2>Findings <span class="pill">${log.length}</span></h2>${findingsTable(log)}</div>`;
+    setProg(100);busy(false);toast("Phone parsed","ok");
+  };
+}
+
+function viewCase(){
+  const byKind={};state.findings.forEach(f=>byKind[f.kind]=(byKind[f.kind]||0)+1);
+  const top=Object.entries(byKind).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  $("#view").innerHTML=`
+  <div class="card"><h2>Session Findings <span class="pill" id="cCount"></span> <span class="spacer"></span><button class="btn ghost" id="cGraph">🕸️ View graph</button></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn" id="expJson">⬇ Export JSON</button>
+      <button class="btn" id="expCsv">⬇ Export CSV</button>
+      <button class="btn ghost" id="copyUrls">⧉ Copy all URLs</button>
+      <button class="btn ghost" id="clearCase">Clear session</button>
+    </div>
+    <div class="chips">${top.map(([k,v])=>`<span>${esc(k)} <b>×${v}</b></span>`).join("")||'<span>empty</span>'}</div>
+    <div id="cTable"></div></div>
+  <div class="card"><h2>Audit Trail <span class="dim" style="font-size:11px">(local, every query logged)</span></h2>
+    <table><thead><tr><th>Timestamp (UTC)</th><th>Action</th><th>Target</th></tr></thead><tbody>
+    ${state.audit.slice(0,100).map(a=>`<tr><td class="mono dim">${esc(a.ts)}</td><td><span class="tag">${esc(a.action)}</span></td><td class="mono">${esc(a.target)}</td></tr>`).join("")||'<tr><td colspan="3" class="dim">empty</td></tr>'}
+    </tbody></table></div>`;
+  const render=()=>{$("#cCount").textContent=state.findings.length;$("#cTable").innerHTML=findingsTable(state.findings)};
+  render();
+  $("#clearCase").onclick=()=>{state.findings=[];$("#casePill").textContent="case findings: 0";render();toast("Session findings cleared")};
+  const dl=(name,content,type)=>{const b=new Blob([content],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;a.click()};
+  $("#expJson").onclick=()=>dl(`osintforge_case_${Date.now()}.json`,JSON.stringify({exported:new Date().toISOString(),attested:state.attest,findings:state.findings},null,1),"application/json");
+  $("#expCsv").onclick=()=>{
+    const rows=[["ts","module","kind","title","url","detail","confidence"],...state.findings.map(f=>[f.ts,f.module,f.kind,f.title,f.url,f.detail,f.confidence])];
+    dl(`osintforge_case_${Date.now()}.csv`,rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n"),"text/csv");
+  };
+  $("#copyUrls").onclick=()=>copy([...new Set(state.findings.map(f=>f.url).filter(Boolean))].join("\n"));
+  $("#cGraph").onclick=()=>go("graph");
+}
+
+const VIEWS={graph:viewGraph,username:viewUsername,dossier:viewDossier,email:viewEmail,image:viewImage,reddit:viewReddit,meta:viewMeta,domain:viewDomain,ip:viewIp,phone:viewPhone,case:viewCase};
+function go(id){
+  $$("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.m===id));
+  $("#viewTitle").textContent=MODULES.find(m=>m.id===id).label;
+  VIEWS[id]();
+}
+$("#nav").innerHTML=MODULES.map(m=>`<button data-m="${m.id}">${m.icon}${m.label}</button>`).join("");
+$$("#nav button").forEach(b=>b.onclick=()=>go(b.dataset.m));
+function syncStatus(){$("#attLbl").textContent=state.attest?"active":"none";$("#attDot").className="dot "+(state.attest?"ok":"bad")}
+function gateAttest(){
+  if(state.attest){syncStatus();return}
+  $("#attestModal").classList.add("show");
+  const chk=()=>{$("#attestGo").disabled=!($("#attestType").value.trim()==="I AGREE"&&$("#attestPurpose").value.trim().length>5)};
+  $("#attestType").oninput=chk;$("#attestPurpose").oninput=chk;
+  $("#attestGo").onclick=()=>{
+    state.attest={ts:new Date().toISOString(),purpose:$("#attestPurpose").value.trim()};
+    LS.set("osf_attest",state.attest);audit("attestation",state.attest.purpose);
+    $("#attestModal").classList.remove("show");syncStatus();toast("Attestation recorded","ok");
+  };
+}
+async function relayHealth(){
+  try{const r=await fetch(state.relay+encodeURIComponent("https://example.com"),{signal:sigT(9000)});
+    $("#relayDot").className="dot "+(r.ok?"ok":"bad");$("#relayLbl").textContent=r.ok?"online":"degraded";
+  }catch(e){$("#relayDot").className="dot bad";$("#relayLbl").textContent="offline"}
+}
+$("#openSettings").onclick=()=>{$("#setRelay").value=state.relay;$("#setConc").value=state.conc;$("#concLbl").textContent=state.conc;$("#setModal").classList.add("show")};
+$("#setModal").addEventListener("click",e=>{if(e.target.id==="setModal")$("#setModal").classList.remove("show")});
+$("#setConc").oninput=e=>$("#concLbl").textContent=e.target.value;
+$("#setSave").onclick=()=>{state.relay=$("#setRelay").value.trim()||state.relay;state.conc=+$("#setConc").value;LS.set("osf_relay",state.relay);LS.set("osf_conc",state.conc);$("#setModal").classList.remove("show");relayHealth();toast("Settings saved","ok")};
+$("#setResetAttest").onclick=()=>{localStorage.removeItem("osf_attest");state.attest=null;$("#setModal").classList.remove("show");gateAttest()};
+$("#setClearAudit").onclick=()=>{state.audit=[];LS.set("osf_audit",[]);toast("Audit log cleared")};
+gateAttest();syncStatus();relayHealth();go("username");
+</script>
+</body>
+</html>

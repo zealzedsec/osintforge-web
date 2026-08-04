@@ -1,0 +1,14 @@
+# TLS material — private key and self-signed cert must never be committed
+*.pem
+key.pem
+cert.pem
+*.key
+*.crt
+
+# Runtime
+__pycache__/
+*.log
+.env
+.env.*
+
+.credentials
