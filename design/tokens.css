@@ -1,0 +1,47 @@
+/* OSINTForge web console — design tokens (SINGULAR Phase 2)   family: OSINTForge
+ * Evidence-board / dossier identity (see IDENTITY.md): manila/kraft + redaction
+ * ink + a single pin-red, typewriter mono + records sans. A proposed
+ * re-derivation OFF the current deep-navy + cyan/emerald "console" cluster.
+ *
+ * NOT yet wired: Phase 2 foundation. The aesthetic shift from cyan-navy to
+ * manila is a Phase 4 decision to validate against a real render before
+ * replacing the inline :root in index.html. The self-hosted-fonts decision
+ * (no CDN) is a Chosen Default and stays.
+ */
+:root{
+  /* — surfaces: manila / kraft, warm (moves off #070b12 navy) — */
+  --bg:       #211d16;   /* desk / dark manila */
+  --panel:    #2b261d;   /* folder */
+  --panel-2:  #342e23;   /* raised card */
+  --line:     #4a4133;
+  --line-2:   #5d5240;
+
+  /* — ink: typed report on paper; redaction bars where needed — */
+  --txt:      #ece3d0;   /* primary ink */
+  --dim:      #b3a788;   /* secondary */
+  --faint:    #7c7259;   /* labels */
+  --redaction:#17140f;   /* redaction bar */
+
+  /* — accent: ONE pin-red — marks the focal entity / an alert. — */
+  --pin:      #c23b2e;
+  --pin-soft: #d9604f;
+
+  /* — status: functional, distinction-safe, never color-only — */
+  --ok:       #6f8f5a;   /* found / verified */
+  --warn:     #c08a2c;   /* rate-limited / pacing */
+  --bad:      #c23b2e;   /* error (shares pin hue; paired with label) */
+  --none:     #8a7f66;   /* no public record (a real state, not an error) */
+
+  /* — type: typewriter mono + a records sans (self-hosted, no CDN) — */
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; /* swap to a typewriter-grade mono at build */
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;  /* a records sans */
+  --figure: tabular-nums;
+
+  /* — space / radius: paper sheets, ~0 radius; separation by ruled tabs — */
+  --r-0: 0; --r-1: 4px;
+  --gap: 12px; --gap-wide: 22px;
+
+  /* — motion: state-only (a card is pinned on an action) — */
+  --dur: 150ms; --ease: cubic-bezier(.2,.7,.2,1);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur: 0ms; } }
