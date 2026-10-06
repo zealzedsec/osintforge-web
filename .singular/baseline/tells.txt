@@ -1,0 +1,49 @@
+== TELL SCAN: /home/user/osintforge-web ==
+-- typography
+saturated-fonts              3
+    /home/user/osintforge-web/index.html:9:     locally installed Inter / JetBrains Mono, then to system faces. -->
+    /home/user/osintforge-web/index.html:14:  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    /home/user/osintforge-web/index.html:15:  --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+caps-tracked-labels          5
+    /home/user/osintforge-web/index.html:30:.logo small{display:block;color:var(--dim);font-size:10.5px;letter-spacing:2px;text-transform:uppercase}
+    /home/user/osintforge-web/index.html:51:.card h3{font-size:13px;color:var(--acc);margin:18px 0 8px;text-transform:uppercase;letter-spacing:1.2px;font-weight:600}
+    /home/user/osintforge-web/index.html:63:th{color:var(--dim);font-weight:600;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.8px;padding:6px 10px;border-bottom:1px solid var(--line2)}
+-- color
+default-purple-family        0
+gradient-text                0
+gradient-washes              9
+    /home/user/osintforge-web/index.html:20:  background:radial-gradient(1200px 500px at 75% -10%,rgba(34,211,238,.07),transparent),
+    /home/user/osintforge-web/index.html:21:             radial-gradient(800px 400px at -10% 110%,rgba(52,211,153,.05),transparent)}
+    /home/user/osintforge-web/index.html:35:.nav button.on{color:var(--txt);background:linear-gradient(90deg,rgba(34,211,238,.14),rgba(34,211,238,.03));box-shadow:inset 2px 0 0 var(--acc)}
+known-default-hex            0
+-- layout/components
+glass-blur                   2
+    /home/user/osintforge-web/index.html:27:#side{position:fixed;left:0;top:0;bottom:0;width:234px;background:rgba(13,20,32,.92);border-right:1px solid var(--line);z-index:20;display:flex;flex-direction:column;padding:18px 12px;backdrop-filter:blur(8px)}
+    /home/user/osintforge-web/index.html:105:.modal{position:fixed;inset:0;background:rgba(4,7,12,.8);backdrop-filter:blur(6px);z-index:100;display:none;place-items:center;padding:20px}
+uniform-radius-shadow        0
+default-button-card-names    0
+pill-badge-new               0
+-- icons/imagery
+default-icon-sets            0
+emoji-as-ui                  72
+    /home/user/osintforge-web/index.html:6:<title>OSINTForge v3 — Intelligence Console</title>
+    /home/user/osintforge-web/index.html:144:    <h2>⚖️ Lawful Use Attestation</h2>
+    /home/user/osintforge-web/index.html:158:    <h2>⚙️ Settings</h2>
+stock-or-placeholder-img     0
+-- motion
+generic-motion               0
+-- copy
+cliche-copy                  0
+placeholder-names            0
+vague-errors                 0
+-- backend
+boilerplate-startup-log      0
+emoji-in-logs                1
+    /home/user/osintforge-web/serve.py:153:    print("  (self-signed cert — your phone will warn once; accept it)")
+weak-error-shape             0
+http200-with-failure         0
+wildcard-cors                0
+todo-implement               0
+verb-style-routes            0
+-- structure (filename checks)
+== END ==
