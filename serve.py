@@ -65,6 +65,7 @@ MCP = ROOT / "osint_mcp.py"
 AGENT_PROMPT = (ROOT / "agent" / "osint.md").read_text(encoding="utf-8") if (ROOT / "agent" / "osint.md").exists() else "You are an OSINT investigator. Use only the osint_* tools."
 RUN_ROOT = os.environ.get("OSF_RUN_DIR", tempfile.gettempdir())
 AGENT_MODEL = os.environ.get("OSF_AGENT_MODEL", "")  # "" => opencode's configured default (auto-detect)
+AGENT_TIMEOUT = int(os.environ.get("OSF_AGENT_TIMEOUT", "300"))  # hard cap on one agent run (s)
 
 NEVER_SERVE = {"key.pem", "cert.pem", ".credentials", "serve.py",
                "osint_tools.py", "workflows.py", "osint_mcp.py"}
@@ -133,12 +134,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _read_body(self) -> dict:
-        n = int(self.headers.get("Content-Length", 0) or 0)
-        if not n:
+        try:
+            n = int(self.headers.get("Content-Length", 0) or 0)
+        except (ValueError, TypeError):
+            return {}
+        if n <= 0 or n > 1_048_576:   # no body, or implausibly large for this API
             return {}
         try:
-            return json.loads(self.rfile.read(n).decode("utf-8"))
-        except (json.JSONDecodeError, ValueError):
+            d = json.loads(self.rfile.read(n).decode("utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
             return {}
 
     def _sse_open(self) -> None:
@@ -201,7 +206,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not url:
                 return self._json({"error": "missing url"}, 400)
             try:
-                r = osint_tools.safe_fetch(url)
+                t = max(5, min(60, int((qs.get("timeout") or ["30"])[0])))
+            except (ValueError, TypeError):
+                t = 30
+            try:
+                r = osint_tools.safe_fetch(url, timeout=t, max_bytes=osint_tools.MAX_BYTES_LARGE)
                 return self._json({"status": r["status"], "text": r["text"],
                                    "final_url": r["final_url"]})
             except osint_tools.BlockedTarget as e:
@@ -242,7 +251,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not wf:
                 return self._json({"error": f"unknown workflow {name}"}, 404)
             try:
-                return self._json(wf["fn"](**body))
+                return self._json(wf["fn"](**{k: v for k, v in body.items() if k in wf["args"]}))
             except Exception as e:  # noqa: BLE001
                 return self._json({"error": str(e)}, 500)
         self.send_error(404)
@@ -293,8 +302,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cmd.append(objective)
         self._sse("start", {"objective": objective, "model": use_model or "auto", "run": run_dir.name})
 
+        stderr_path = run_dir / "stderr.log"
+        stderr_f = open(stderr_path, "wb")
         proc = subprocess.Popen(cmd, cwd=str(run_dir), stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                                stderr=stderr_f, text=True, bufsize=1)
+        stderr_f.close()  # the child holds its own dup of the fd
+
+        # Watchdog: a stuck model or a tool loop must not pin the request
+        # forever. After AGENT_TIMEOUT the process is terminated.
+        killed = {"watchdog": False}
+
+        def _kill():
+            if proc.poll() is None:
+                killed["watchdog"] = True
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        timer = threading.Timer(AGENT_TIMEOUT, _kill)
+        timer.daemon = True
+        timer.start()
+
         offset = 0
         alive = True
 
@@ -323,6 +352,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     alive = False
                     break
         finally:
+            timer.cancel()
             if proc.poll() is None:
                 proc.terminate()
                 try:
@@ -331,7 +361,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     proc.kill()
             if alive:
                 drain_findings()
-                self._sse("done", {"exit": proc.returncode})
+                rc = proc.returncode
+                if killed["watchdog"]:
+                    self._sse("error", {"message": f"agent run exceeded {AGENT_TIMEOUT}s and was stopped"})
+                elif rc not in (0, None):
+                    try:
+                        err = stderr_path.read_text("utf-8", "replace")[-600:]
+                    except OSError:
+                        err = ""
+                    self._sse("error", {"message": f"agent exited with code {rc}",
+                                        "detail": err or "(no stderr — is opencode logged in? check `opencode providers`)"})
+                self._sse("done", {"exit": rc})
             shutil.rmtree(run_dir, ignore_errors=True)
 
     # --- headers / logging ---

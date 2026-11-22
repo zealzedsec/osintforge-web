@@ -166,7 +166,9 @@ def person_search(name: str = "", city: str = "", username: str = "",
     """Broad person pivot: dorked web search across selectors, a handle sweep
     if a username is given, and email-intel if an address is given."""
     findings, steps = [], []
-    selector = name or username or email
+    selector = (name or username or email).strip()
+    if not selector:
+        return {"findings": [], "steps": [], "summary": {"error": "no selector provided"}}
     dorks = [selector]
     if name:
         dorks += [f'"{name}" (profile OR resume OR contact)',

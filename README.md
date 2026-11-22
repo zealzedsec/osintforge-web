@@ -5,11 +5,22 @@ image/phone recon with an entity graph, now backed by a **local OSINT API** and
 an **autonomous agent**. Public-source data only; lawful-use attestation and a
 local audit trail are built in.
 
+## Install
+
+```bash
+./install.sh          # checks prereqs, self-tests, installs a launcher + desktop entry
+```
+
+The installer verifies Python 3.11+ and `openssl`, offers to install `opencode`
+(the agent runtime — optional), runs a self-test (SSRF guard, tools, workflows,
+dorks), and adds an `osintforge` launcher to `~/.local/bin`. Flags:
+`--with-opencode`, `--no-opencode`, `--selftest`, `--uninstall`.
+
 ## Run
 
 ```bash
-./start.sh            # binds your LAN IP on :8443 (reachable from your phone)
-# or
+osintforge            # after install: LAN HTTPS on :8443 (reachable from your phone)
+./start.sh            # same, from the repo
 python3 serve.py --host 127.0.0.1 --port 8443   # loopback only
 ```
 
@@ -33,7 +44,16 @@ redirect hop. Public relays are now an **opt-in** fallback in Settings.
 **2. Server-side tools** (`/api/tool/<name>`) — reliable, private versions of
 the recon primitives: `username_sweep` (per-site body/API detection with honest
 confidence, not status-200 guesses), `email_intel`, `domain_dns` / `domain_ct`
-/ `domain_wayback`, `ip_intel`, `web_search`, `phone_parse`.
+/ `domain_wayback`, `ip_intel`, `web_search`, `phone_parse`, `generate_dorks`.
+
+**2b. Dork Engine** (`🎯 Dork Engine` tab, `generate_dorks`) — automated
+advanced dorking across every category: exposed files, config/backups/logs,
+credentials & API keys, login/admin panels, cloud buckets (S3/GCS/Azure),
+code & secrets (GitHub / grep.app / publicwww), infrastructure (Shodan / Censys
+/ FOFA), paste sites, people-search, and leak indexes (IntelX). Kind
+auto-detects from the target (domain / name / username / email / IP); each dork
+is a ready-to-click link-out with multi-engine alternates and the raw query for
+copy/paste. Also a right-click pivot from graph nodes.
 
 **3. Workflows** (`⚡ Workflows` tab, `/api/workflow/<name>`) — one-click,
 multi-step automations that chain tools and auto-pivot, streaming a live step
@@ -62,9 +82,10 @@ as data, never instructions. Agent run dirs are created under `$OSF_RUN_DIR`
 
 | File | Role |
 |---|---|
+| `install.sh` | installer: prereq checks, self-test, launcher + desktop entry |
 | `index.html` | the single-page console (UI, graph, client modules) |
 | `serve.py` | HTTPS host + Basic auth + the `/api/*` backend |
-| `osint_tools.py` | server-side OSINT primitives + SSRF-guarded `safe_fetch` |
+| `osint_tools.py` | server-side OSINT primitives + SSRF guard + dork engine |
 | `workflows.py` | deterministic multi-step pipelines |
 | `osint_mcp.py` | stdio MCP server exposing the tools to opencode |
 | `agent/osint.md` | the agent's system prompt |

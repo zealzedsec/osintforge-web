@@ -35,6 +35,7 @@ import ipaddress
 import json
 import re
 import socket
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Callable, Iterable
@@ -42,7 +43,8 @@ from typing import Any, Callable, Iterable
 # --- limits -----------------------------------------------------------------
 UA = "OSINTForge/4 (+local; research)"
 DEFAULT_TIMEOUT = 15
-MAX_BYTES = 8 * 1024 * 1024           # 8 MiB hard cap on any single response
+MAX_BYTES = 8 * 1024 * 1024           # 8 MiB default cap on any single response
+MAX_BYTES_LARGE = 64 * 1024 * 1024    # for crt.sh / Wayback CDX, which can be huge
 MAX_REDIRECTS = 5
 POOL = 8                               # default fan-out for parallel probes
 
@@ -253,8 +255,10 @@ def username_sweep(username: str, sites: list[dict] | None = None,
     matches are 'high', bare status-200 is 'low' (soft-404 prone)."""
     u = username.strip().lstrip("@")
     sites = sites or SWEEP_SITES
-    if not u:
-        return {"findings": [], "meta": {"error": "empty username"}}
+    # Reject whitespace / path / query chars: these would break the raw-subdomain
+    # templates (tumblr/substack) and are never valid handles anyway.
+    if not u or len(u) > 64 or re.search(r"[\s/\\?#%]", u):
+        return {"findings": [], "meta": {"error": "invalid username"}}
 
     def probe(s: dict) -> dict | None:
         raw = u.lower() if s.get("norm") == "lower" else u
@@ -438,7 +442,9 @@ def domain_ct(domain: str, limit: int = 200) -> dict:
     subs: dict[str, int] = {}
     certs = 0
     for q in (f"%25.{d}", d):
-        r = fetch_json(f"https://crt.sh/?q={q}&output=json", timeout=40)
+        # crt.sh returns one big JSON array; the default 8 MiB cap truncates it
+        # for busy domains (→ invalid JSON → zero subdomains), so raise it here.
+        r = fetch_json(f"https://crt.sh/?q={q}&output=json", timeout=50, max_bytes=MAX_BYTES_LARGE)
         if r:
             certs = len(r)
             for c in r:
@@ -461,7 +467,7 @@ def domain_wayback(domain: str) -> dict:
     r = safe_fetch(
         f"https://web.archive.org/cdx/search/cdx?url=*.{urllib.parse.quote(d)}/*"
         "&output=json&fl=original,mimetype,timestamp&collapse=urlkey&limit=2000&filter=statuscode:200",
-        timeout=40)
+        timeout=50, max_bytes=MAX_BYTES_LARGE)
     try:
         rows = json.loads(r["text"])[1:]
     except (json.JSONDecodeError, ValueError):
@@ -558,6 +564,9 @@ def web_search(query: str, limit: int = 20) -> dict:
     A keyed provider (Brave Search / Serper / SerpAPI) is the right way to get
     true organic results server-side; slot it in here and feed the key from the
     optional local keystore (see README)."""
+    query = (query or "").strip()
+    if not query:
+        return {"findings": [], "meta": {"error": "empty query"}}
     out: list[dict] = []
     j = fetch_json(f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&t=osintforge")
     if j:
@@ -586,8 +595,28 @@ def web_search(query: str, limit: int = 20) -> dict:
     return {"findings": out, "meta": {"query": query, "count": len(out)}}
 
 
-_CC = {"971": "AE", "972": "IL", "27": "ZA", "44": "UK", "1": "US/CA", "49": "DE", "33": "FR",
-       "91": "IN", "86": "CN", "81": "JP", "7": "RU/KZ", "61": "AU", "55": "BR", "234": "NG"}
+_CC = {
+    "971": "AE", "972": "IL", "973": "BH", "974": "QA", "975": "BT", "976": "MN", "977": "NP",
+    "992": "TJ", "993": "TM", "994": "AZ", "995": "GE", "996": "KG", "998": "UZ", "880": "BD",
+    "855": "KH", "856": "LA", "852": "HK", "853": "MO", "850": "KP", "81": "JP", "82": "KR",
+    "84": "VN", "86": "CN", "90": "TR", "91": "IN", "92": "PK", "93": "AF", "94": "LK", "95": "MM",
+    "98": "IR", "60": "MY", "61": "AU", "62": "ID", "63": "PH", "64": "NZ", "65": "SG", "66": "TH",
+    "40": "RO", "41": "CH", "43": "AT", "44": "UK", "45": "DK", "46": "SE", "47": "NO", "48": "PL",
+    "49": "DE", "30": "GR", "31": "NL", "32": "BE", "33": "FR", "34": "ES", "36": "HU", "39": "IT",
+    "351": "PT", "352": "LU", "353": "IE", "354": "IS", "355": "AL", "358": "FI", "359": "BG",
+    "370": "LT", "371": "LV", "372": "EE", "373": "MD", "374": "AM", "375": "BY", "380": "UA",
+    "381": "RS", "385": "HR", "386": "SI", "387": "BA", "389": "MK", "420": "CZ", "421": "SK",
+    "212": "MA", "213": "DZ", "216": "TN", "218": "LY", "220": "GM", "221": "SN", "223": "ML",
+    "225": "CI", "226": "BF", "227": "NE", "228": "TG", "229": "BJ", "230": "MU", "231": "LR",
+    "232": "SL", "233": "GH", "234": "NG", "235": "TD", "237": "CM", "238": "CV", "240": "GQ",
+    "241": "GA", "242": "CG", "243": "CD", "244": "AO", "249": "SD", "250": "RW", "251": "ET",
+    "252": "SO", "253": "DJ", "254": "KE", "255": "TZ", "256": "UG", "257": "BI", "258": "MZ",
+    "260": "ZM", "261": "MG", "262": "RE", "263": "ZW", "264": "NA", "265": "MW", "266": "LS",
+    "267": "BW", "268": "SZ", "269": "KM", "27": "ZA", "20": "EG", "501": "BZ", "502": "GT",
+    "503": "SV", "504": "HN", "505": "NI", "506": "CR", "507": "PA", "509": "HT", "51": "PE",
+    "52": "MX", "53": "CU", "54": "AR", "55": "BR", "56": "CL", "57": "CO", "58": "VE", "591": "BO",
+    "592": "GY", "593": "EC", "595": "PY", "597": "SR", "598": "UY", "7": "RU/KZ", "1": "US/CA",
+}
 
 
 def phone_parse(number: str) -> dict:
@@ -607,6 +636,142 @@ def phone_parse(number: str) -> dict:
     return {"findings": out, "meta": {"e164": "+" + body, "country": cc, "valid": valid}}
 
 
+# ---------------------------------------------------------------------------
+# Dork engine — advanced, automated dork generation across every category.
+# Dorks are *link-outs*: organic results are reliable in a browser (engines
+# poison server-side scrapes), so each dork is a ready-to-click search URL with
+# the raw query attached for copy/paste into any engine.
+# ---------------------------------------------------------------------------
+_DORK_ENGINES = {
+    "google": "https://www.google.com/search?q=",
+    "bing": "https://www.bing.com/search?q=",
+    "ddg": "https://duckduckgo.com/?q=",
+    "yandex": "https://yandex.com/search/?text=",
+    "startpage": "https://www.startpage.com/sp/search?query=",
+    "brave": "https://search.brave.com/search?q=",
+    "github": "https://github.com/search?type=code&q=",
+    "grep": "https://grep.app/search?q=",
+    "shodan": "https://www.shodan.io/search?query=",
+    "censys": "https://search.censys.io/search?resource=hosts&q=",
+    "fofa": "https://en.fofa.info/result?qbase64=",
+    "publicwww": "https://publicwww.com/websites/",
+    "intelx": "https://intelx.io/?s=",
+}
+
+# Each entry: (category, label, query-template, engine). Placeholders: {t}
+# (target), {city}, {org}. A dork mentioning {city} is skipped when no city.
+DORKS: dict[str, list[tuple]] = {
+    "domain": [
+        ("Files", "Directory listing", 'site:{t} intitle:"index of"', "google"),
+        ("Files", "Open dirs with secrets", 'site:{t} intitle:"index of" (passwd|password|backup|credentials|.sql|.env)', "google"),
+        ("Files", "Config files", 'site:{t} (ext:env|ext:ini|ext:conf|ext:cfg|ext:yml|ext:yaml|ext:json)', "google"),
+        ("Files", "Backups & DB dumps", 'site:{t} (ext:bak|ext:old|ext:backup|ext:sql|ext:tar|ext:gz|ext:zip|ext:rar)', "google"),
+        ("Files", "Log files", 'site:{t} ext:log', "google"),
+        ("Files", "Git / SVN exposure", 'site:{t} (inurl:.git|inurl:.svn|intitle:"index of" ".git")', "google"),
+        ("Files", "Env / dotfiles", 'site:{t} (inurl:.env|inurl:.htaccess|inurl:.npmrc|inurl:.aws)', "google"),
+        ("Docs", "Documents & sheets", 'site:{t} (ext:pdf|ext:doc|ext:docx|ext:xls|ext:xlsx|ext:csv|ext:ppt|ext:pptx)', "google"),
+        ("Creds", "Passwords in text", 'site:{t} (intext:"password"|intext:"passwd"|intext:"pwd"|intext:"DB_PASSWORD")', "google"),
+        ("Creds", "API keys / secrets", 'site:{t} (intext:"api_key"|intext:"apikey"|intext:"client_secret"|intext:"secret_key"|intext:"access_token")', "google"),
+        ("Access", "Login / admin panels", 'site:{t} (inurl:admin|inurl:login|intitle:login|inurl:signin|inurl:portal)', "google"),
+        ("Access", "Dev / staging / test", 'site:{t} (inurl:dev|inurl:test|inurl:staging|inurl:uat|inurl:sandbox)', "google"),
+        ("Access", "Open redirects", 'site:{t} (inurl:redirect=|inurl:url=|inurl:return=|inurl:next=|inurl:dest=)', "google"),
+        ("App", "phpinfo()", 'site:{t} ext:php intitle:phpinfo "published by the PHP Group"', "google"),
+        ("App", "WordPress internals", 'site:{t} (inurl:wp-content|inurl:wp-config|inurl:wp-admin|inurl:xmlrpc.php)', "google"),
+        ("App", "SQL / stack errors", 'site:{t} (intext:"sql syntax near"|intext:"Warning: mysql"|intext:"unhandled exception"|intext:"stack trace:")', "google"),
+        ("Recon", "Subdomains (ex-www)", 'site:*.{t} -www', "google"),
+        ("Cloud", "S3 buckets", '(site:s3.amazonaws.com|site:s3-external-1.amazonaws.com|site:s3.*.amazonaws.com) "{t}"', "google"),
+        ("Cloud", "GCS / Azure / DO", '(site:storage.googleapis.com|site:blob.core.windows.net|site:digitaloceanspaces.com) "{t}"', "google"),
+        ("Paste", "Paste sites", '(site:pastebin.com|site:ghostbin.com|site:rentry.co|site:controlc.com|site:justpaste.it) "{t}"', "google"),
+        ("Code", "GitHub secrets", '"{t}" (password OR api_key OR secret OR token OR credentials)', "github"),
+        ("Code", "GitHub private keys", '"{t}" "BEGIN RSA PRIVATE KEY"', "github"),
+        ("Code", "Code search (grep.app)", '{t}', "grep"),
+        ("Code", "Sites running tech (publicwww)", '"{t}"', "publicwww"),
+        ("Infra", "Shodan hostname", 'hostname:{t}', "shodan"),
+        ("Infra", "Shodan SSL/cert", 'ssl:"{t}"', "shodan"),
+        ("Infra", "Shodan org", 'org:"{org}"', "shodan"),
+        ("Infra", "Censys hosts", '{t}', "censys"),
+        ("Leaks", "IntelX exposure", '{t}', "intelx"),
+    ],
+    "name": [
+        ("Profiles", "LinkedIn", 'site:linkedin.com/in "{t}"', "google"),
+        ("Profiles", "Facebook", 'site:facebook.com "{t}"', "google"),
+        ("Profiles", "X / Twitter", '(site:twitter.com|site:x.com) "{t}"', "google"),
+        ("Profiles", "Instagram", 'site:instagram.com "{t}"', "google"),
+        ("Docs", "Resume / CV", '"{t}" (resume OR cv OR "curriculum vitae") (ext:pdf OR ext:doc OR ext:docx)', "google"),
+        ("Contact", "Contact details", '"{t}" (email OR "e-mail" OR contact OR phone OR mobile)', "google"),
+        ("Geo", "Name + city", '"{t}" "{city}"', "google"),
+        ("People", "People-search sites", '"{t}" (site:thatsthem.com OR site:spokeo.com OR site:fastpeoplesearch.com OR site:idcrawl.com OR site:truepeoplesearch.com)', "google"),
+        ("Breach", "Leaks / mentions", '"{t}" (leak OR breach OR dump OR database)', "google"),
+        ("Leaks", "IntelX", '{t}', "intelx"),
+    ],
+    "username": [
+        ("Communities", "Dev & chat platforms", '"{t}" (site:reddit.com OR site:github.com OR site:gitlab.com OR site:keybase.io OR site:t.me OR site:news.ycombinator.com)', "google"),
+        ("Paste", "Paste sites", '"{t}" (site:pastebin.com OR site:ghostbin.com OR site:rentry.co OR site:controlc.com)', "google"),
+        ("Forums", "Forums & boards", '"{t}" (intitle:profile OR inurl:user OR inurl:member OR forum)', "google"),
+        ("Web", "Exact mentions", 'intext:"{t}"', "google"),
+        ("Code", "GitHub mentions", '"{t}"', "github"),
+        ("Leaks", "IntelX", '{t}', "intelx"),
+    ],
+    "email": [
+        ("Exact", "Exact email", '"{t}"', "google"),
+        ("Breach", "Leaks / combolists", '"{t}" (leak OR breach OR dump OR password OR combolist)', "google"),
+        ("Paste", "Paste sites", '(site:pastebin.com OR site:ghostbin.com OR site:rentry.co) "{t}"', "google"),
+        ("Code", "GitHub commits/config", '"{t}"', "github"),
+        ("Docs", "In documents", '"{t}" (ext:pdf OR ext:xlsx OR ext:csv OR ext:txt)', "google"),
+        ("Leaks", "IntelX", '{t}', "intelx"),
+    ],
+    "ip": [
+        ("Infra", "Shodan host", '{t}', "shodan"),
+        ("Infra", "Censys host", 'ip:{t}', "censys"),
+        ("Infra", "FOFA host", 'ip="{t}"', "fofa"),
+        ("Web", "Mentions of IP", '"{t}"', "google"),
+        ("Leaks", "IntelX", '{t}', "intelx"),
+    ],
+}
+
+
+def _infer_dork_kind(t: str) -> str:
+    if "@" in t:
+        return "email"
+    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", t):
+        return "ip"
+    if " " in t.strip():
+        return "name"
+    if re.match(r"^[a-z0-9.-]+\.[a-z]{2,}$", t, re.I):
+        return "domain"
+    return "username"
+
+
+def _dork_url(engine: str, q: str) -> str:
+    if engine == "fofa":
+        # FOFA wants a base64 query string
+        import base64
+        return _DORK_ENGINES["fofa"] + urllib.parse.quote(base64.b64encode(q.encode()).decode())
+    base = _DORK_ENGINES.get(engine, _DORK_ENGINES["google"])
+    return base + urllib.parse.quote(q)
+
+
+def generate_dorks(target: str, kind: str = "auto", city: str = "", org: str = "") -> dict:
+    """Generate a categorised set of advanced search dorks for a target.
+    `kind` ∈ auto|domain|name|username|email|ip. Returns findings whose url is a
+    ready-to-click search link and whose detail is the raw query (copy/paste)."""
+    target = (target or "").strip().lstrip("@")
+    if not target:
+        return {"findings": [], "meta": {"error": "empty target"}}
+    kind = kind if kind in DORKS else _infer_dork_kind(target)
+    ctx = {"t": target, "city": city.strip(), "org": (org or target).strip()}
+    out = []
+    for cat, label, tmpl, engine in DORKS[kind]:
+        if "{city}" in tmpl and not ctx["city"]:
+            continue
+        try:
+            q = tmpl.format(**ctx)
+        except (KeyError, IndexError):
+            continue
+        out.append(_finding("dorks", "dork_" + engine, f"[{cat}] {label}", _dork_url(engine, q), q, "low"))
+    return {"findings": out, "meta": {"target": target, "kind": kind, "count": len(out)}}
+
+
 # dispatch table shared by the HTTP API and the MCP server
 TOOLS: dict[str, Callable[..., dict]] = {
     "username_sweep": username_sweep,
@@ -617,4 +782,5 @@ TOOLS: dict[str, Callable[..., dict]] = {
     "ip_intel": ip_intel,
     "web_search": web_search,
     "phone_parse": phone_parse,
+    "generate_dorks": generate_dorks,
 }

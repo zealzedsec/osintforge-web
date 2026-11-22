@@ -63,6 +63,11 @@ TOOL_DEFS: list[dict] = [
     {"name": "phone_parse",
      "description": "E.164 validation and country attribution for a phone number.",
      "inputSchema": _schema({"number": "phone number in any format"}, ["number"])},
+    {"name": "generate_dorks",
+     "description": "Generate categorised advanced search dorks (files, creds, cloud buckets, code, infra, paste sites, leaks) for a target. kind auto-detects from the target.",
+     "inputSchema": _schema({"target": "domain / name / username / email / ip",
+                             "kind": "optional: domain|name|username|email|ip (default auto)",
+                             "city": "optional city (name dorks)", "org": "optional org (infra dorks)"}, ["target"])},
     # workflows
     {"name": "wf_handle_profile",
      "description": "WORKFLOW: full identity profile for a handle — sweep, dossier, mine emails, email-intel each, re-sweep derived handles.",
@@ -73,6 +78,9 @@ TOOL_DEFS: list[dict] = [
     {"name": "wf_email_identity",
      "description": "WORKFLOW: email → identity — email intel then sweep every derived handle.",
      "inputSchema": _schema({"email": "email address", "name": "optional real name"}, ["email"])},
+    {"name": "wf_person_search",
+     "description": "WORKFLOW: broad person pivot — dorked web search across selectors + handle sweep + email-intel. Give any of name/city/username/email.",
+     "inputSchema": _schema({"name": "full name", "city": "city", "username": "handle", "email": "email"}, [])},
 ]
 
 
@@ -85,6 +93,9 @@ def _dispatch(name: str, args: dict) -> dict:
         return W.domain_surface(args["domain"])
     if name == "wf_email_identity":
         return W.email_identity(args["email"], args.get("name", ""))
+    if name == "wf_person_search":
+        return W.person_search(args.get("name", ""), args.get("city", ""),
+                               args.get("username", ""), args.get("email", ""))
     raise KeyError(f"unknown tool {name}")
 
 
