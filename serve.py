@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private HTTPS host for the OSINTForge console.
+"""Private HTTPS host + local OSINT API for the OSINTForge console.
 
 Threat model, since "accessible from my phone" and "secure" pull against
 each other and the resolution is worth stating:
@@ -16,10 +16,23 @@ each other and the resolution is worth stating:
     a home network; the certificate is self-signed, which your phone will
     warn about once.
   * It is never exposed to the internet. No port forwarding, no tunnel.
-    Off the LAN it simply is not reachable.
 
-Nothing here is written to disk by the app itself: the console keeps its
-case data in the browser's localStorage on whichever device you use.
+New in v4 — the local OSINT API (everything under /api/, behind the same auth):
+
+  * /api/relay  moves cross-origin fetches SERVER-SIDE. The old console sent
+    every probed URL (i.e. who you are investigating) to public CORS relays.
+    That leaked targets to strangers and contradicted this file's own "never
+    announce to a third party" rule. Now traffic leaves from this host, guarded
+    by the SSRF allowlist in osint_tools.safe_fetch (public destinations only).
+  * /api/tool, /api/workflow run the server-side OSINT primitives/pipelines.
+  * /api/agent drives opencode headless as an autonomous investigator. The
+    agent is locked down (bash/edit/write/webfetch disabled at the agent level)
+    so it can ONLY call the read-only osint_* MCP tools -- a prompt-injected
+    objective cannot make it run a shell command or touch the filesystem.
+
+Case data still lives in the browser's localStorage. Agent run dirs are created
+under OSF_RUN_DIR (a temp dir by default) and deleted when the run ends, so the
+repo stays clean.
 """
 from __future__ import annotations
 
@@ -27,26 +40,40 @@ import argparse
 import base64
 import hmac
 import http.server
+import json
 import os
 import secrets
+import shutil
+import socket
 import ssl
 import subprocess
 import sys
+import tempfile
+import threading
+import time
+import urllib.parse
 from pathlib import Path
+
+import osint_tools
+import workflows
 
 ROOT = Path(__file__).resolve().parent
 CERT = ROOT / "cert.pem"
 KEY = ROOT / "key.pem"
 CRED = ROOT / ".credentials"
+MCP = ROOT / "osint_mcp.py"
+AGENT_PROMPT = (ROOT / "agent" / "osint.md").read_text(encoding="utf-8") if (ROOT / "agent" / "osint.md").exists() else "You are an OSINT investigator. Use only the osint_* tools."
+RUN_ROOT = os.environ.get("OSF_RUN_DIR", tempfile.gettempdir())
+AGENT_MODEL = os.environ.get("OSF_AGENT_MODEL", "")  # "" => opencode's configured default (auto-detect)
+
+NEVER_SERVE = {"key.pem", "cert.pem", ".credentials", "serve.py",
+               "osint_tools.py", "workflows.py", "osint_mcp.py"}
 
 
 def ensure_cert(host: str) -> None:
-    """Self-signed cert with the LAN IP in subjectAltName.
-
-    The SAN matters: a certificate carrying only a CN is rejected outright
-    by modern mobile browsers, which would make the site unreachable rather
-    than merely warned-about.
-    """
+    """Self-signed cert with the LAN IP in subjectAltName. The SAN matters:
+    a certificate carrying only a CN is rejected outright by modern mobile
+    browsers, which would make the site unreachable rather than merely warned."""
     if CERT.exists() and KEY.exists():
         return
     subprocess.run(
@@ -61,8 +88,6 @@ def ensure_cert(host: str) -> None:
 
 
 def ensure_password() -> tuple[str, str]:
-    """Load or mint credentials. Written 0600 so other local users cannot
-    read them out of the file."""
     if CRED.exists():
         user, _, pw = CRED.read_text().strip().partition(":")
         if user and pw:
@@ -73,12 +98,15 @@ def ensure_password() -> tuple[str, str]:
     return user, pw
 
 
+# ---------------------------------------------------------------------------
 class Handler(http.server.SimpleHTTPRequestHandler):
     user = pw = ""
+    protocol_version = "HTTP/1.1"  # keep-alive, needed for SSE
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ROOT), **kw)
 
+    # --- auth ---
     def _authorised(self) -> bool:
         header = self.headers.get("Authorization", "")
         if not header.startswith("Basic "):
@@ -87,8 +115,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             got = base64.b64decode(header[6:]).decode("utf-8", "replace")
         except Exception:
             return False
-        # compare_digest on the whole "user:pass" pair: comparing the two
-        # halves separately with == would leak the username by timing.
         return hmac.compare_digest(got, f"{self.user}:{self.pw}")
 
     def _deny(self) -> None:
@@ -97,14 +123,54 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    # --- responses ---
+    def _json(self, obj, status: int = 200) -> None:
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_body(self) -> dict:
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        if not n:
+            return {}
+        try:
+            return json.loads(self.rfile.read(n).decode("utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            return {}
+
+    def _sse_open(self) -> None:
+        # No Content-Length on a stream, so under HTTP/1.1 we must close the
+        # connection at the end rather than claim keep-alive — the client reads
+        # until EOF. close_connection stops the handler reusing the socket.
+        self.close_connection = True
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+    def _sse(self, event: str, data) -> bool:
+        """Return False if the client has gone away."""
+        try:
+            payload = data if isinstance(data, str) else json.dumps(data)
+            self.wfile.write(f"event: {event}\ndata: {payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False
+
+    # --- routing ---
     def do_GET(self) -> None:
         if not self._authorised():
             return self._deny()
-        # Never serve the key, cert or credentials file, whatever the path
-        # normalisation ends up doing.
-        if Path(self.path).name in {"key.pem", "cert.pem", ".credentials", "serve.py"}:
-            self.send_error(404)
-            return
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/"):
+            return self._api_get(path)
+        if Path(path).name in NEVER_SERVE or Path(path).suffix == ".py" or "/agent/" in path:
+            return self.send_error(404)
         super().do_GET()
 
     def do_HEAD(self) -> None:
@@ -112,19 +178,183 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._deny()
         super().do_HEAD()
 
+    def do_POST(self) -> None:
+        if not self._authorised():
+            return self._deny()
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith("/api/"):
+            return self._api_post(path)
+        self.send_error(404)
+
+    # --- API: GET ---
+    def _api_get(self, path: str) -> None:
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if path == "/api/health":
+            return self._json({"ok": True, "version": "4.0",
+                               "tools": list(osint_tools.TOOLS),
+                               "workflows": list(workflows.WORKFLOWS)})
+        if path == "/api/agent/info":
+            return self._json({"available": shutil.which("opencode") is not None,
+                               "model": AGENT_MODEL or "auto (opencode default)"})
+        if path == "/api/relay":
+            url = (qs.get("url") or [""])[0]
+            if not url:
+                return self._json({"error": "missing url"}, 400)
+            try:
+                r = osint_tools.safe_fetch(url)
+                return self._json({"status": r["status"], "text": r["text"],
+                                   "final_url": r["final_url"]})
+            except osint_tools.BlockedTarget as e:
+                return self._json({"error": f"blocked: {e}"}, 400)
+            except osint_tools.FetchError as e:
+                return self._json({"error": str(e)}, 502)
+        if path.startswith("/api/workflow/") and path.endswith("/stream"):
+            name = path[len("/api/workflow/"):-len("/stream")]
+            args = {}
+            try:
+                args = json.loads((qs.get("args") or ["{}"])[0])
+            except (json.JSONDecodeError, ValueError):
+                pass
+            return self._stream_workflow(name, args)
+        if path == "/api/agent/stream":
+            objective = (qs.get("objective") or [""])[0]
+            model = (qs.get("model") or [""])[0]
+            return self._stream_agent(objective, model)
+        self.send_error(404)
+
+    # --- API: POST ---
+    def _api_post(self, path: str) -> None:
+        body = self._read_body()
+        if path.startswith("/api/tool/"):
+            name = path[len("/api/tool/"):]
+            fn = osint_tools.TOOLS.get(name)
+            if not fn:
+                return self._json({"error": f"unknown tool {name}"}, 404)
+            try:
+                return self._json(fn(**body))
+            except TypeError as e:
+                return self._json({"error": f"bad args: {e}"}, 400)
+            except Exception as e:  # noqa: BLE001
+                return self._json({"error": str(e)}, 500)
+        if path.startswith("/api/workflow/"):
+            name = path[len("/api/workflow/"):]
+            wf = workflows.WORKFLOWS.get(name)
+            if not wf:
+                return self._json({"error": f"unknown workflow {name}"}, 404)
+            try:
+                return self._json(wf["fn"](**body))
+            except Exception as e:  # noqa: BLE001
+                return self._json({"error": str(e)}, 500)
+        self.send_error(404)
+
+    # --- workflow SSE ---
+    def _stream_workflow(self, name: str, args: dict) -> None:
+        wf = workflows.WORKFLOWS.get(name)
+        if not wf:
+            return self._json({"error": f"unknown workflow {name}"}, 404)
+        self._sse_open()
+        alive = [True]
+
+        def emit(step):
+            if alive[0] and not self._sse("step", step):
+                alive[0] = False
+        try:
+            res = wf["fn"](**{k: v for k, v in args.items() if k in wf["args"]}, emit=emit)
+            self._sse("result", {"findings": res["findings"], "summary": res.get("summary", {})})
+        except Exception as e:  # noqa: BLE001
+            self._sse("error", {"message": str(e)})
+        self._sse("done", {})
+
+    # --- agent SSE: drive opencode headless ---
+    def _stream_agent(self, objective: str, model: str) -> None:
+        if not objective.strip():
+            return self._json({"error": "missing objective"}, 400)
+        if not shutil.which("opencode"):
+            return self._json({"error": "opencode not installed"}, 503)
+        self._sse_open()
+        run_dir = Path(tempfile.mkdtemp(prefix="osf_run_", dir=RUN_ROOT))
+        case_file = run_dir / "findings.jsonl"
+        case_file.touch()
+        (run_dir / "opencode.json").write_text(json.dumps({
+            "$schema": "https://opencode.ai/config.json",
+            "permission": {"edit": {"*": "deny"}, "bash": {"*": "deny"}, "webfetch": "deny"},
+            "mcp": {"osint": {"type": "local", "command": ["python3", str(MCP)],
+                              "enabled": True, "environment": {"OSF_CASE_FILE": str(case_file)}}},
+            "agent": {"osint": {"description": "Autonomous OSINT investigator",
+                                "mode": "primary", "prompt": AGENT_PROMPT,
+                                "tools": {k: False for k in ("bash", "edit", "write", "read",
+                                          "webfetch", "glob", "grep", "list", "patch")}}},
+        }), encoding="utf-8")
+
+        cmd = ["opencode", "run", "--agent", "osint", "--format", "json", "--auto"]
+        use_model = model or AGENT_MODEL
+        if use_model:
+            cmd += ["--model", use_model]
+        cmd.append(objective)
+        self._sse("start", {"objective": objective, "model": use_model or "auto", "run": run_dir.name})
+
+        proc = subprocess.Popen(cmd, cwd=str(run_dir), stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        offset = 0
+        alive = True
+
+        def drain_findings():
+            nonlocal offset
+            try:
+                lines = case_file.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                return True
+            for ln in lines[offset:]:
+                offset += 1
+                if ln.strip():
+                    try:
+                        if not self._sse("finding", json.loads(ln)):
+                            return False
+                    except json.JSONDecodeError:
+                        pass
+            return True
+
+        try:
+            for line in proc.stdout:  # raw opencode JSON events, streamed live
+                if line.strip() and not self._sse("agent", line.strip()):
+                    alive = False
+                    break
+                if not drain_findings():
+                    alive = False
+                    break
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            if alive:
+                drain_findings()
+                self._sse("done", {"exit": proc.returncode})
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+    # --- headers / logging ---
     def end_headers(self) -> None:
-        # The console fetches third-party APIs and CORS relays by design, so
-        # a restrictive CSP would break it. These are the headers that cost
-        # nothing and still help.
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Cache-Control", "no-store")
+        if "Cache-Control" not in self._headers_buffer_keys():
+            self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def _headers_buffer_keys(self) -> set:
+        keys = set()
+        for raw in getattr(self, "_headers_buffer", []):
+            try:
+                line = raw.decode("latin-1")
+            except Exception:
+                continue
+            if ":" in line:
+                keys.add(line.split(":", 1)[0])
+        return keys
+
     def log_message(self, fmt: str, *args) -> None:
-        # Default logging would print the request line only, but be explicit:
-        # nothing derived from the Authorization header is ever logged.
         sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
 
 
@@ -147,9 +377,12 @@ def main() -> int:
     httpd = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
 
+    agent = "available" if shutil.which("opencode") else "not installed"
     print(f"OSINTForge  https://{args.host}:{args.port}/")
     print(f"  user      {user}")
     print(f"  password  {pw}")
+    print(f"  api       /api/health · /api/relay · /api/tool · /api/workflow · /api/agent")
+    print(f"  agent     opencode {agent} · model {AGENT_MODEL or 'auto (opencode default)'}")
     print("  (self-signed cert — your phone will warn once; accept it)")
     try:
         httpd.serve_forever()
