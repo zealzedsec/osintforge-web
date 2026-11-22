@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private HTTPS host + local OSINT API for the OSINTForge console.
+"""Private HTTPS host + local OSINT API for the ThatOsintMe console.
 
 Threat model, since "accessible from my phone" and "secure" pull against
 each other and the resolution is worth stating:
@@ -80,8 +80,8 @@ def ensure_cert(host: str) -> None:
     subprocess.run(
         ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
          "-keyout", str(KEY), "-out", str(CERT), "-days", "825",
-         "-subj", "/CN=osintforge.local",
-         "-addext", f"subjectAltName=IP:{host},DNS:osintforge.local"],
+         "-subj", "/CN=thatosintme.local",
+         "-addext", f"subjectAltName=IP:{host},DNS:thatosintme.local"],
         check=True, capture_output=True,
     )
     KEY.chmod(0o600)
@@ -120,7 +120,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _deny(self) -> None:
         self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Basic realm="OSINTForge", charset="UTF-8"')
+        self.send_header("WWW-Authenticate", 'Basic realm="ThatOsintMe", charset="UTF-8"')
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -399,7 +399,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Serve OSINTForge over private HTTPS.")
+    ap = argparse.ArgumentParser(description="Serve ThatOsintMe over private HTTPS.")
     ap.add_argument("--host", default=os.environ.get("OSF_HOST", "127.0.0.1"),
                     help="LAN address to bind. Loopback by default; pass your "
                          "LAN IP to reach it from a phone.")
@@ -418,7 +418,7 @@ def main() -> int:
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
 
     agent = "available" if shutil.which("opencode") else "not installed"
-    print(f"OSINTForge  https://{args.host}:{args.port}/")
+    print(f"ThatOsintMe  https://{args.host}:{args.port}/")
     print(f"  user      {user}")
     print(f"  password  {pw}")
     print(f"  api       /api/health · /api/relay · /api/tool · /api/workflow · /api/agent")

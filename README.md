@@ -1,4 +1,4 @@
-# OSINTForge v4 — Intelligence Console
+# ThatOsintMe v4 — Intelligence Console
 
 A private, self-hosted OSINT console: a browser UI for username/email/domain/IP/
 image/phone recon with an entity graph, now backed by a **local OSINT API** and
@@ -13,13 +13,13 @@ local audit trail are built in.
 
 The installer verifies Python 3.11+ and `openssl`, offers to install `opencode`
 (the agent runtime — optional), runs a self-test (SSRF guard, tools, workflows,
-dorks), and adds an `osintforge` launcher to `~/.local/bin`. Flags:
+dorks), and adds an `thatosintme` launcher to `~/.local/bin`. Flags:
 `--with-opencode`, `--no-opencode`, `--selftest`, `--uninstall`.
 
 ## Run
 
 ```bash
-osintforge            # after install: LAN HTTPS on :8443 (reachable from your phone)
+thatosintme            # after install: LAN HTTPS on :8443 (reachable from your phone)
 ./start.sh            # same, from the repo
 python3 serve.py --host 127.0.0.1 --port 8443   # loopback only
 ```
@@ -105,7 +105,7 @@ as data, never instructions. Agent run dirs are created under `$OSF_RUN_DIR`
 
 ## Lawful use
 
-OSINTForge collects publicly available data only. Use it for authorized
+ThatOsintMe collects publicly available data only. Use it for authorized
 investigation, journalism, security research, self-lookup, or consented client
 work. Not for stalking, harassment, doxxing, or anything unlawful. Every query
 is recorded in the local audit trail.

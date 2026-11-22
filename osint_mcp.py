@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal stdio MCP server exposing OSINTForge tools to opencode.
+"""Minimal stdio MCP server exposing ThatOsintMe tools to opencode.
 
 opencode (the agent runtime) connects to this over stdio and can call any
 OSINT primitive or workflow as a tool. This is deliberately a from-scratch
@@ -126,7 +126,7 @@ def handle(msg: dict):
         proto = (msg.get("params") or {}).get("protocolVersion", PROTO)
         return _result(req_id, {"protocolVersion": proto,
                                 "capabilities": {"tools": {"listChanged": False}},
-                                "serverInfo": {"name": "osintforge", "version": "4.0"}})
+                                "serverInfo": {"name": "thatosintme", "version": "4.0"}})
     if method in ("notifications/initialized", "initialized"):
         return None
     if method == "ping":

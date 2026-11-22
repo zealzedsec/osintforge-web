@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Server-side OSINT primitives for OSINTForge.
+"""Server-side OSINT primitives for ThatOsintMe.
 
 Why this file exists
 --------------------
@@ -41,7 +41,7 @@ import urllib.request
 from typing import Any, Callable, Iterable
 
 # --- limits -----------------------------------------------------------------
-UA = "OSINTForge/4 (+local; research)"
+UA = "ThatOsintMe/4 (+local; research)"
 DEFAULT_TIMEOUT = 15
 MAX_BYTES = 8 * 1024 * 1024           # 8 MiB default cap on any single response
 MAX_BYTES_LARGE = 64 * 1024 * 1024    # for crt.sh / Wayback CDX, which can be huge
@@ -568,7 +568,7 @@ def web_search(query: str, limit: int = 20) -> dict:
     if not query:
         return {"findings": [], "meta": {"error": "empty query"}}
     out: list[dict] = []
-    j = fetch_json(f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&t=osintforge")
+    j = fetch_json(f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&t=thatosintme")
     if j:
         if j.get("AbstractURL"):
             out.append(_finding("meta_search", "web_abstract", j.get("Heading") or query,

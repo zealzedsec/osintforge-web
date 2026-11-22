@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start OSINTForge on the current LAN address. Re-detects the IP each run,
+# Start ThatOsintMe on the current LAN address. Re-detects the IP each run,
 # because a DHCP lease change would otherwise leave it bound to an address
 # the machine no longer has.
 set -euo pipefail
