@@ -156,8 +156,9 @@ tr:hover td{background:rgba(34,211,238,.03)}
 <div class="modal" id="setModal">
   <div class="mbox">
     <h2>⚙️ Settings</h2>
-    <p>CORS relay used to probe sites that block direct browser requests. Point this at your own relay for speed/privacy.</p>
-    <label class="dim" style="font-size:11px">Relay base URL (URL-encoded target appended)</label>
+    <p>Cross-origin fetches now run <b style="color:var(--txt)">server-side</b> through this host's own SSRF-guarded relay — your investigation targets stay on this machine instead of going to a public relay. The option below is an off-host fallback only, and it discloses targets to a third party.</p>
+    <label class="dim" style="display:flex;gap:8px;align-items:center;font-size:12px;margin:4px 0 12px"><input type="checkbox" id="setPublic" style="width:auto"> Allow public CORS relays as fallback (leaks targets off-host)</label>
+    <label class="dim" style="font-size:11px">Public relay base URL (fallback only, URL-encoded target appended)</label>
     <input id="setRelay" style="width:100%;margin:6px 0 14px" class="mono">
     <label class="dim" style="font-size:11px">Parallel probe concurrency: <b id="concLbl">4</b></label>
     <input id="setConc" type="range" min="1" max="10" value="4" style="width:100%;margin:6px 0 18px;padding:0">
@@ -199,7 +200,22 @@ tr:hover td{background:rgba(34,211,238,.03)}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const state={relay:LS.get("osf_relay","https://api.allorigins.win/get?url="),conc:LS.get("osf_conc",4),audit:LS.get("osf_audit",[]),vault:LS.get("osf_vault",[]),findings:[],attest:LS.get("osf_attest",null)};
+const state={relay:LS.get("osf_relay","https://api.allorigins.win/get?url="),conc:LS.get("osf_conc",4),audit:LS.get("osf_audit",[]),vault:LS.get("osf_vault",[]),findings:[],attest:LS.get("osf_attest",null),publicRelays:LS.get("osf_public_relays",false)};
+// Only http/https links are clickable. A scraped finding could carry a
+// javascript: or data: URL; this stops it becoming a one-click script run.
+const safeUrl=u=>{u=String(u||"");return /^https?:\/\//i.test(u)?u:"#"};
+// Same-origin JSON POST to the local API (carries Basic auth automatically).
+async function apiPost(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});if(!r.ok)throw new Error("api "+r.status);return r.json()}
+// Consume a Server-Sent-Events stream over fetch (so Basic auth is sent,
+// which EventSource cannot guarantee). onEvent(event,data) per frame.
+async function sseStream(url,onEvent,signal){
+  const r=await fetch(url,{signal});if(!r.ok||!r.body)throw new Error("stream "+r.status);
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf="";
+  for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+    let i;while((i=buf.indexOf("\n\n"))>=0){const frame=buf.slice(0,i);buf=buf.slice(i+2);
+      let ev="message",data="";frame.split("\n").forEach(l=>{if(l.startsWith("event:"))ev=l.slice(6).trim();else if(l.startsWith("data:"))data+=l.slice(5).trim()});
+      let parsed=data;try{parsed=JSON.parse(data)}catch(e){}onEvent(ev,parsed)}}
+}
 function toast(m,t=""){const d=document.createElement("div");d.className="toast "+t;d.textContent=m;$("#toasts").appendChild(d);setTimeout(()=>{d.style.opacity=0;d.style.transition="opacity .4s";setTimeout(()=>d.remove(),400)},4200)}
 function setProg(p){$("#prog i").style.width=p?`${p}%`:"0";if(p>=100)setTimeout(()=>$("#prog i").style.width="0",600)}
 function busy(b){document.body.style.cursor=b?"wait":"default"}
@@ -212,15 +228,25 @@ function ham(a,b){if(!a||!b||a.length!==b.length)return 64;let d=0;const W=[0,1,
 const simPct=(a,b)=>Math.max(0,Math.round((1-ham(a,b)/64)*100));
 
 async function relayGet(url){
-  const relays=[state.relay,"https://api.allorigins.win/get?url=","https://corsproxy.io/?url="].filter(Boolean);
-  for(const base of [...new Set(relays)]){
-    try{
-      const res=await fetch(base+encodeURIComponent(url),{signal:sigT(22000)});
-      if(base.includes("allorigins")){const j=await res.json();return{status:(j.status&&j.status.http_code)||200,text:j.contents||"",via:"allorigins"}}
-      return{status:res.status,text:await res.text(),via:"corsproxy"};
-    }catch(e){}
+  // Primary relay is now our OWN auth-gated, SSRF-guarded server endpoint.
+  // The old build shipped every target URL to public relays (allorigins /
+  // corsproxy) — i.e. it disclosed who you were investigating to a stranger.
+  // /api/relay keeps that traffic on this host. Public relays are opt-in only.
+  try{
+    const res=await fetch("/api/relay?url="+encodeURIComponent(url),{signal:sigT(45000)});
+    if(res.ok){const j=await res.json();if(j&&typeof j.text==="string")return{status:j.status||200,text:j.text,via:"local"}}
+  }catch(e){}
+  if(state.publicRelays){
+    const relays=[state.relay,"https://api.allorigins.win/get?url=","https://corsproxy.io/?url="].filter(Boolean);
+    for(const base of [...new Set(relays)]){
+      try{
+        const res=await fetch(base+encodeURIComponent(url),{signal:sigT(22000)});
+        if(base.includes("allorigins")){const j=await res.json();return{status:(j.status&&j.status.http_code)||200,text:j.contents||"",via:"allorigins"}}
+        return{status:res.status,text:await res.text(),via:"corsproxy"};
+      }catch(e){}
+    }
   }
-  throw new Error("all relays failed");
+  throw new Error("relay failed (enable public relays in Settings to fall back off-host)");
 }
 async function smartFetch(url,{timeout=15000}={}){
   try{const r=await fetch(url,{signal:sigT(timeout)});return{status:r.status,text:await r.text(),via:"direct"}}catch(e){}
@@ -330,6 +356,9 @@ async function hostImage(file){
 
 const MODULES=[
  {id:"graph",label:"🕸️ Entity Graph",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/></svg>'},
+ {id:"agent",label:"🤖 Agent",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 7V4M9 13h.01M15 13h.01M8 19l-1 2M16 19l1 2"/></svg>'},
+ {id:"workflow",label:"⚡ Workflows",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h6M14 6h6M4 12h16M4 18h6M14 18h6"/><circle cx="12" cy="6" r="2"/><circle cx="12" cy="18" r="2"/></svg>'},
+ {id:"dork",label:"🎯 Dork Engine",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4.3-4.3"/></svg>'},
  {id:"username",label:"Username Sweep",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>'},
  {id:"dossier",label:"Dossier Compiler",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/></svg>'},
  {id:"email",label:"Email Intel",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>'},
@@ -345,7 +374,7 @@ const chip=c=>`<span class="chip c-${c}">${c.toUpperCase()}</span>`;
 function findingsTable(list){
   if(!list.length)return'<p class="dim">No findings.</p>';
   return`<table><thead><tr><th style="width:110px">Type</th><th>Finding</th><th>Detail</th><th style="width:70px">Conf</th></tr></thead><tbody>${
-    dedupe(list).map(f=>`<tr><td><span class="tag">${esc(f.kind)}</span></td><td>${f.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="url">${esc(f.url)}</div>`:esc(f.title)}</td><td class="dim">${esc(f.detail||"")}</td><td>${chip(f.confidence)}</td></tr>`).join("")
+    dedupe(list).map(f=>`<tr><td><span class="tag">${esc(f.kind)}</span></td><td>${f.url?`<a href="${esc(safeUrl(f.url))}" target="_blank" rel="noopener">${esc(f.title)}</a><div class="url">${esc(f.url)}</div>`:esc(f.title)}</td><td class="dim">${esc(f.detail||"")}</td><td>${chip(f.confidence)}</td></tr>`).join("")
   }</tbody></table>`;
 }
 const kvHTML=pairs=>`<div class="kv">${pairs.map(([k,v])=>`<div class="cell"><small>${esc(k)}</small><div class="v">${esc(v)}</div></div>`).join("")}</div>`;
@@ -860,6 +889,7 @@ function viewGraph(){
     if(n.type==="domain")items.push(`<button data-a="domain">resolve domain</button>`);
     if(n.type==="ip")items.push(`<button data-a="ip">locate IP</button>`);
     if(n.type==="service")items.push(`<button data-a="dossier">compile dossier</button>`);
+    if(["person","email","domain","ip"].includes(n.type))items.push(`<button data-a="dork">generate dorks</button>`);
     items.push(`<button data-a="copyid">copy id</button>`);
     m.innerHTML=items.join("");
     m.style.left=e.clientX+"px";m.style.top=e.clientY+"px";
@@ -877,6 +907,7 @@ function viewGraph(){
       if(a==="domain")pivot("domain",n.label);
       if(a==="ip")pivot("ip",n.label);
       if(a==="dossier")pivot("dossier",n.label.split(":").pop().trim().replace(/^@+/,""));
+      if(a==="dork")pivot("dork",n.label.split(":").pop().trim().replace(/^@+/,""));
     });
   });
   document.addEventListener("click",e=>{
@@ -1656,6 +1687,7 @@ function viewCase(){
     <div class="row" style="margin-bottom:10px">
       <button class="btn" id="expJson">⬇ Export JSON</button>
       <button class="btn" id="expCsv">⬇ Export CSV</button>
+      <button class="btn" id="expMd">⬇ Markdown report</button>
       <button class="btn ghost" id="copyUrls">⧉ Copy all URLs</button>
       <button class="btn ghost" id="clearCase">Clear session</button>
     </div>
@@ -1674,11 +1706,166 @@ function viewCase(){
     const rows=[["ts","module","kind","title","url","detail","confidence"],...state.findings.map(f=>[f.ts,f.module,f.kind,f.title,f.url,f.detail,f.confidence])];
     dl(`osintforge_case_${Date.now()}.csv`,rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n"),"text/csv");
   };
+  $("#expMd").onclick=()=>{
+    const fs=dedupe(state.findings);
+    const byMod={};fs.forEach(f=>(byMod[f.module||"misc"]=byMod[f.module||"misc"]||[]).push(f));
+    const order=c=>({high:0,med:1,low:2}[c]??3);
+    const confCount=c=>fs.filter(f=>f.confidence===c).length;
+    let md=`# OSINTForge Intelligence Report\n\n`;
+    md+=`- **Generated:** ${new Date().toISOString()}\n`;
+    if(state.attest)md+=`- **Stated purpose:** ${state.attest.purpose}\n- **Attested:** ${state.attest.ts}\n`;
+    md+=`- **Findings:** ${fs.length} (high ${confCount("high")} · med ${confCount("med")} · low ${confCount("low")})\n`;
+    md+=`\n> Open-source leads only. Corroborate before operational use.\n`;
+    Object.keys(byMod).sort().forEach(m=>{
+      md+=`\n## ${m}\n\n`;
+      byMod[m].slice().sort((a,b)=>order(a.confidence)-order(b.confidence)).forEach(f=>{
+        md+=`- **[${(f.confidence||"").toUpperCase()}] ${f.kind}** — ${f.title}`;
+        if(f.url&&safeUrl(f.url)!=="#")md+=` <${f.url}>`;
+        if(f.detail)md+=`\n  - ${f.detail}`;
+        md+="\n";
+      });
+    });
+    md+=`\n## Audit trail (recent)\n\n| UTC | action | target |\n|---|---|---|\n`;
+    state.audit.slice(0,40).forEach(a=>md+=`| ${a.ts} | ${a.action} | ${(a.target||"").replace(/\|/g,"\\|")} |\n`);
+    dl(`osintforge_report_${Date.now()}.md`,md,"text/markdown");
+    toast("Markdown report exported","ok");
+  };
   $("#copyUrls").onclick=()=>copy([...new Set(state.findings.map(f=>f.url).filter(Boolean))].join("\n"));
   $("#cGraph").onclick=()=>go("graph");
 }
 
-const VIEWS={graph:viewGraph,username:viewUsername,dossier:viewDossier,email:viewEmail,image:viewImage,reddit:viewReddit,meta:viewMeta,domain:viewDomain,ip:viewIp,phone:viewPhone,case:viewCase};
+const WORKFLOWS_META=[
+ {id:"handle_profile",label:"Full Handle Profile",args:[["username","handle (no @)",1]],about:"sweep → dossier → mine emails → email-intel → re-sweep derived handles"},
+ {id:"domain_surface",label:"Domain Attack-Surface Scan",args:[["domain","example.com",1]],about:"RDAP + live DNS → CT subdomains → Wayback secrets / sensitive files"},
+ {id:"email_identity",label:"Email → Identity",args:[["email","name@example.com",1],["name","first last (optional)",0]],about:"mail health + gravatar + git attribution → sweep every derived handle"},
+ {id:"person_search",label:"Person Search",args:[["name","Full name",0],["city","City (optional)",0],["username","handle (optional)",0],["email","email (optional)",0]],about:"dorked web search across selectors + handle sweep + email-intel"},
+];
+function viewWorkflow(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>⚡ Workflows</h2>
+    <p class="sub">One-click automated investigations. Each chains the server-side tools, auto-pivots on what it finds, and runs privately on this host — findings stream into the case graph live.</p>
+    <div class="row"><select id="wfSel">${WORKFLOWS_META.map(w=>`<option value="${w.id}">${esc(w.label)}</option>`).join("")}</select></div>
+    <p class="dim" id="wfAbout" style="margin:8px 0 2px;font-size:12px"></p>
+    <div class="row" id="wfArgs" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:12px"><button class="btn prime" id="wfRun">▶ Run workflow</button><button class="btn ghost" id="wfGraph">🕸️ View graph</button></div>
+    <div class="progline"><i id="wfBar"></i></div>
+  </div>
+  <div class="card" id="wfSteps" style="display:none"><h2>Steps</h2><div id="wfStepList"></div></div>
+  <div class="card" id="wfRes" style="display:none"><h2>Findings <span class="pill" id="wfCount"></span></h2><div id="wfTable"></div></div>`;
+  const renderArgs=()=>{const w=WORKFLOWS_META.find(x=>x.id===$("#wfSel").value);$("#wfAbout").textContent=w.about;
+    $("#wfArgs").innerHTML=w.args.map(([k,ph])=>`<input data-k="${k}" class="mono" placeholder="${esc(ph)}" style="min-width:190px">`).join("")};
+  $("#wfSel").onchange=renderArgs;renderArgs();
+  $("#wfGraph").onclick=()=>go("graph");
+  const pv=takePivot("workflow");if(pv){$("#wfSel").value="handle_profile";renderArgs();const i=$("#wfArgs input");if(i)i.value=pv}
+  $("#wfRun").onclick=async()=>{
+    const id=$("#wfSel").value,w=WORKFLOWS_META.find(x=>x.id===id),args={};
+    $$("#wfArgs input").forEach(i=>{if(i.value.trim())args[i.dataset.k]=i.value.trim()});
+    const req=w.args.filter(a=>a[2]).map(a=>a[0]);
+    if(id==="person_search"){if(!args.name&&!args.username&&!args.email)return toast("Provide at least one selector","err")}
+    else if(!req.every(k=>args[k]))return toast("Fill the required field","err");
+    audit("workflow_"+id,Object.values(args).join(" "));busy(true);
+    $("#wfSteps").style.display="block";$("#wfStepList").innerHTML="";$("#wfRes").style.display="none";
+    const steps={};let n=0;$("#wfBar").style.width="4%";
+    try{
+      await sseStream(`/api/workflow/${id}/stream?args=`+encodeURIComponent(JSON.stringify(args)),(ev,data)=>{
+        if(ev==="step"){
+          if(!steps[data.name]){const d=document.createElement("div");d.className="site";d.style.marginBottom="6px";$("#wfStepList").appendChild(d);steps[data.name]=d}
+          const st=data.status==="done"?`<span class="st st-hit">DONE ${data.count||0}</span>`:data.status==="error"?`<span class="st st-err">ERR</span>`:`<span class="st st-run">RUN</span>`;
+          steps[data.name].innerHTML=`<b>${esc(data.name)}</b>${st}`;
+          if(data.status_final){n++;$("#wfBar").style.width=Math.min(95,10+n*11)+"%"}
+        } else if(ev==="result"){
+          const fs=data.findings||[];$("#wfRes").style.display="block";$("#wfCount").textContent=fs.length+" findings";
+          $("#wfTable").innerHTML=findingsTable(fs);fs.forEach(f=>addFinding({module:"workflow",...f}));
+        } else if(ev==="error"){toast("Workflow error: "+(data.message||""),"err")}
+      });
+    }catch(e){toast("Workflow failed: "+e.message,"err")}
+    setProg(100);busy(false);$("#wfBar").style.width="100%";toast("Workflow complete","ok");
+  };
+}
+function fmtAgentEvent(data){
+  if(typeof data==="string"){try{data=JSON.parse(data)}catch(e){return data.slice(0,500)}}
+  const p=(data&&data.part)||data;
+  if(p){
+    if(p.type==="text"&&p.text)return p.text;
+    if(p.type==="reasoning"&&p.text)return "💭 "+p.text;
+    if(p.type==="tool"){const nm=p.tool||p.name||"tool";const stt=p.state&&p.state.status?" ["+p.state.status+"]":"";return "🔧 "+nm+stt}
+    if(p.type==="step-start")return "— step —";
+  }
+  if(data&&data.type)return "· "+data.type;
+  return JSON.stringify(data).slice(0,300);
+}
+function viewAgent(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>🤖 Autonomous Agent <span class="pill" id="agModel">checking…</span></h2>
+    <p class="sub">Give an objective in plain language. An opencode-driven agent plans and runs a multi-step OSINT investigation with the server-side tools, streaming its reasoning and findings into the case graph. <b style="color:var(--txt)">Public data only</b> — the agent has no shell, file, or arbitrary-web access.</p>
+    <textarea id="agObj" class="mono" style="width:100%;min-height:72px" placeholder="Profile the handle 'torvalds' and map their account footprint&#10;Map the attack surface of example.com&#10;Who is behind name@example.com?"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn prime" id="agRun">▶ Run investigation</button><button class="btn ghost" id="agStop" disabled>■ Stop</button><button class="btn ghost" id="agGraph">🕸️ View graph</button></div>
+  </div>
+  <div class="card" id="agWrap" style="display:none">
+    <h2>Agent Log <span class="spacer"></span><span class="pill" id="agFind">0 findings</span></h2>
+    <div id="agLog" class="mono" style="max-height:320px;overflow:auto;font-size:12px;white-space:pre-wrap;background:#05080f;border:1px solid var(--line);border-radius:8px;padding:12px"></div>
+    <h3>Findings</h3><div id="agTable"></div>
+  </div>`;
+  let ctrl=null,findings=[];
+  fetch("/api/agent/info").then(r=>r.json()).then(j=>{$("#agModel").textContent=j.available?("model: "+j.model):"opencode not installed";if(!j.available)$("#agRun").disabled=true}).catch(()=>{$("#agModel").textContent="info unavailable"});
+  $("#agGraph").onclick=()=>go("graph");
+  const pv=takePivot("agent");if(pv)$("#agObj").value=pv;
+  const logLine=(txt,cls)=>{const d=$("#agLog");d.insertAdjacentHTML("beforeend",`<div class="${cls||""}">${esc(txt)}</div>`);d.scrollTop=d.scrollHeight};
+  $("#agRun").onclick=async()=>{
+    const obj=$("#agObj").value.trim();if(!obj)return toast("Enter an objective","err");
+    audit("agent",obj);busy(true);findings=[];
+    $("#agWrap").style.display="block";$("#agLog").innerHTML="";$("#agTable").innerHTML="";$("#agFind").textContent="0 findings";
+    $("#agRun").disabled=true;$("#agStop").disabled=false;ctrl=new AbortController();
+    try{
+      await sseStream("/api/agent/stream?objective="+encodeURIComponent(obj),(ev,data)=>{
+        if(ev==="start")logLine("▶ "+data.objective+"  ·  model: "+data.model,"dim");
+        else if(ev==="agent")logLine(fmtAgentEvent(data));
+        else if(ev==="finding"){findings.push(data);addFinding({module:"agent",...data});$("#agFind").textContent=findings.length+" findings";$("#agTable").innerHTML=findingsTable(findings)}
+        else if(ev==="done")logLine("■ done (exit "+(data&&data.exit!=null?data.exit:"?")+")","dim");
+        else if(ev==="error")logLine("error: "+(data&&data.message||data));
+      },ctrl.signal);
+    }catch(e){if(e.name!=="AbortError")toast("Agent stream failed: "+e.message,"err")}
+    busy(false);$("#agRun").disabled=false;$("#agStop").disabled=true;toast("Agent run finished","ok");
+  };
+  $("#agStop").onclick=()=>{if(ctrl)ctrl.abort();$("#agStop").disabled=true;$("#agRun").disabled=false;busy(false);toast("Agent stopped")};
+}
+const DORK_ENGINES=[["Google","https://www.google.com/search?q="],["Bing","https://www.bing.com/search?q="],["DDG","https://duckduckgo.com/?q="],["Yandex","https://yandex.com/search/?text="],["Startpage","https://www.startpage.com/sp/search?query="],["Brave","https://search.brave.com/search?q="]];
+function viewDorks(){
+  $("#view").innerHTML=`
+  <div class="card"><h2>🎯 Dork Engine</h2>
+    <p class="sub">Automated advanced dorks across every category — files, credentials, cloud buckets, code/secrets, infrastructure (Shodan/Censys/FOFA), paste sites, leaks. Link-outs open in a browser, where organic results are reliable (engines poison server-side scrapes). Query text is attached for copy/paste into any engine.</p>
+    <div class="row">
+      <input id="dkTarget" class="grow mono" placeholder="domain / full name / @handle / email / IP">
+      <select id="dkKind"><option value="auto">auto-detect</option><option value="domain">domain</option><option value="name">person name</option><option value="username">username</option><option value="email">email</option><option value="ip">IP</option></select>
+      <button class="btn prime" id="dkRun">▶ Generate</button>
+    </div>
+    <div class="row" style="margin-top:8px"><input id="dkCity" placeholder="city — for name dorks" style="width:180px"><input id="dkOrg" class="mono" placeholder="org — for infra dorks" style="width:180px"></div>
+  </div>
+  <div id="dkOut"></div>`;
+  $("#dkTarget").addEventListener("keydown",e=>{if(e.key==="Enter")$("#dkRun").click()});
+  const pv=takePivot("dork");if(pv)$("#dkTarget").value=pv;
+  $("#dkRun").onclick=async()=>{
+    const t=$("#dkTarget").value.trim();if(!t)return toast("Enter a target","err");
+    audit("dorks",t);busy(true);setProg(30);
+    let res;
+    try{res=await apiPost("/api/tool/generate_dorks",{target:t,kind:$("#dkKind").value,city:$("#dkCity").value.trim(),org:$("#dkOrg").value.trim()})}
+    catch(e){busy(false);return toast("Dork generation failed: "+e.message,"err")}
+    const fs=res.findings||[];
+    if(!fs.length){$("#dkOut").innerHTML='<div class="card"><p class="dim">No dorks generated.</p></div>';busy(false);return}
+    fs.forEach(f=>addFinding({module:"dorks",...f}));
+    const groups={};
+    fs.forEach(f=>{const m=f.title.match(/^\[([^\]]+)\]\s*(.*)/);const cat=m?m[1]:"Other";(groups[cat]=groups[cat]||[]).push({label:m?m[2]:f.title,url:f.url,q:f.detail,eng:(f.kind||"").replace("dork_","")})});
+    $("#dkOut").innerHTML=`<div class="card"><h2>${fs.length} dorks · <span class="tag">${esc(res.meta.kind)}</span> <span class="spacer"></span><button class="btn ghost" id="dkCopy">⧉ copy all queries</button></h2>`+
+      Object.entries(groups).map(([cat,items])=>`<h3>${esc(cat)}</h3><div class="dorkgrid">${items.map(it=>{
+        const alt=(it.eng==="google")?`<span class="dim" style="font-size:9.5px">${DORK_ENGINES.slice(1,5).map(([n,b])=>`<a href="${esc(b)}${encodeURIComponent(it.q)}" target="_blank" rel="noopener">${n}</a>`).join(" · ")}</span>`:"";
+        return `<a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener">${esc(it.label)} ↗<small>${esc(it.q)}</small></a>${alt?`<div style="margin:-4px 0 6px 2px">${alt}</div>`:""}`;
+      }).join("")}</div>`).join("")+`</div>`;
+    $("#dkCopy").onclick=()=>copy(fs.map(f=>f.detail).join("\n"));
+    setProg(100);busy(false);toast(`Generated ${fs.length} dorks`,"ok");
+  };
+  if(pv)$("#dkRun").click();
+}
+const VIEWS={graph:viewGraph,agent:viewAgent,workflow:viewWorkflow,dork:viewDorks,username:viewUsername,dossier:viewDossier,email:viewEmail,image:viewImage,reddit:viewReddit,meta:viewMeta,domain:viewDomain,ip:viewIp,phone:viewPhone,case:viewCase};
 function go(id){
   $$("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.m===id));
   $("#viewTitle").textContent=MODULES.find(m=>m.id===id).label;
@@ -1699,14 +1886,14 @@ function gateAttest(){
   };
 }
 async function relayHealth(){
-  try{const r=await fetch(state.relay+encodeURIComponent("https://example.com"),{signal:sigT(9000)});
-    $("#relayDot").className="dot "+(r.ok?"ok":"bad");$("#relayLbl").textContent=r.ok?"online":"degraded";
-  }catch(e){$("#relayDot").className="dot bad";$("#relayLbl").textContent="offline"}
+  try{const r=await fetch("/api/health",{signal:sigT(9000)});
+    $("#relayDot").className="dot "+(r.ok?"ok":"bad");$("#relayLbl").textContent=r.ok?"local ✓":"degraded";
+  }catch(e){$("#relayDot").className="dot bad";$("#relayLbl").textContent="offline (static)"}
 }
-$("#openSettings").onclick=()=>{$("#setRelay").value=state.relay;$("#setConc").value=state.conc;$("#concLbl").textContent=state.conc;$("#setModal").classList.add("show")};
+$("#openSettings").onclick=()=>{$("#setRelay").value=state.relay;$("#setConc").value=state.conc;$("#concLbl").textContent=state.conc;$("#setPublic").checked=!!state.publicRelays;$("#setModal").classList.add("show")};
 $("#setModal").addEventListener("click",e=>{if(e.target.id==="setModal")$("#setModal").classList.remove("show")});
 $("#setConc").oninput=e=>$("#concLbl").textContent=e.target.value;
-$("#setSave").onclick=()=>{state.relay=$("#setRelay").value.trim()||state.relay;state.conc=+$("#setConc").value;LS.set("osf_relay",state.relay);LS.set("osf_conc",state.conc);$("#setModal").classList.remove("show");relayHealth();toast("Settings saved","ok")};
+$("#setSave").onclick=()=>{state.relay=$("#setRelay").value.trim()||state.relay;state.conc=+$("#setConc").value;state.publicRelays=$("#setPublic").checked;LS.set("osf_relay",state.relay);LS.set("osf_conc",state.conc);LS.set("osf_public_relays",state.publicRelays);$("#setModal").classList.remove("show");relayHealth();toast("Settings saved","ok")};
 $("#setResetAttest").onclick=()=>{localStorage.removeItem("osf_attest");state.attest=null;$("#setModal").classList.remove("show");gateAttest()};
 $("#setClearAudit").onclick=()=>{state.audit=[];LS.set("osf_audit",[]);toast("Audit log cleared")};
 gateAttest();syncStatus();relayHealth();go("username");
