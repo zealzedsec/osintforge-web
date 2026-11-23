@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Private HTTPS host + local OSINT API for the ThatOsintMe console.
+"""Local host + private-HTTPS host + OSINT API for the ThatOsintMe console.
 
-Threat model, since "accessible from my phone" and "secure" pull against
-each other and the resolution is worth stating:
+Two modes, chosen by the bind address (see main()):
 
-  * The page must be reachable from another device, so it cannot bind
-    loopback. It binds one explicit LAN address rather than 0.0.0.0 --
-    0.0.0.0 would also publish it on the libvirt bridge (192.168.122.1),
-    exposing it to every VM on this host for no benefit.
-  * Anyone else on the same Wi-Fi can reach that address, so it requires
-    HTTP Basic auth with a generated 128-bit password. Compared with
-    hmac.compare_digest so a wrong password leaks nothing through timing.
-  * Basic auth sends the password in every request, so plaintext HTTP would
-    put it on the air in clear. TLS is therefore not optional here even on
-    a home network; the certificate is self-signed, which your phone will
-    warn about once.
-  * It is never exposed to the internet. No port forwarding, no tunnel.
+  * LOCAL (default, --host 127.0.0.1): plain HTTP, NO password. Launch it and
+    you land straight on the in-app lawful-use attestation (state your purpose,
+    type "I AGREE") — that is the only gate, and it is enough because loopback
+    is not reachable from the network. localhost is a "secure context" to the
+    browser, so crypto.subtle / clipboard still work over plain HTTP. This is
+    the one-click launcher experience.
+  * LAN (--host <your LAN IP>, for phone access): the page is now reachable by
+    anyone on the Wi-Fi, so it cannot rely on the client-side attestation alone.
+    It automatically switches on HTTP Basic auth with a generated 128-bit
+    password (compared with hmac.compare_digest so a wrong password leaks
+    nothing by timing) over TLS (self-signed; your phone warns once). Without
+    TLS the Basic password would travel in clear, so TLS is not optional there.
+    It binds one explicit LAN address, never 0.0.0.0 (which would also publish
+    it on the libvirt bridge to every VM on this host).
+
+Either way it is never exposed to the internet: no port forwarding, no tunnel.
 
 New in v4 — the local OSINT API (everything under /api/, behind the same auth):
 
@@ -102,6 +105,7 @@ def ensure_password() -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 class Handler(http.server.SimpleHTTPRequestHandler):
     user = pw = ""
+    auth_on = True                 # off in local (loopback) mode — attestation is the gate
     protocol_version = "HTTP/1.1"  # keep-alive, needed for SSE
 
     def __init__(self, *a, **kw):
@@ -109,6 +113,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # --- auth ---
     def _authorised(self) -> bool:
+        if not type(self).auth_on:   # local mode: no password; attestation gates the UI
+            return True
         header = self.headers.get("Authorization", "")
         if not header.startswith("Basic "):
             return False
@@ -399,31 +405,52 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Serve ThatOsintMe over private HTTPS.")
+    ap = argparse.ArgumentParser(
+        description="Serve ThatOsintMe locally (no password), or over private HTTPS for LAN/phone access.")
     ap.add_argument("--host", default=os.environ.get("OSF_HOST", "127.0.0.1"),
-                    help="LAN address to bind. Loopback by default; pass your "
-                         "LAN IP to reach it from a phone.")
+                    help="Address to bind. Loopback (default) serves plain HTTP with NO password — "
+                         "the in-app attestation is the only gate, which is safe because loopback is "
+                         "not reachable from the network. A non-loopback (LAN) address automatically "
+                         "switches on TLS + a generated Basic-auth password so Wi-Fi neighbours can't walk in.")
     ap.add_argument("--port", type=int, default=8443)
+    ap.add_argument("--open", action="store_true", help="open the console in your browser once it is up")
     args = ap.parse_args()
 
-    ensure_cert(args.host)
-    user, pw = ensure_password()
-    Handler.user, Handler.pw = user, pw
-
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    ctx.load_cert_chain(certfile=str(CERT), keyfile=str(KEY))
+    loopback = args.host in ("127.0.0.1", "::1", "localhost")
+    secure = not loopback            # an exposed address must be protected
+    Handler.auth_on = secure
 
     httpd = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
-    httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+    scheme, user, pw = "http", "", ""
+    if secure:
+        ensure_cert(args.host)
+        user, pw = ensure_password()
+        Handler.user, Handler.pw = user, pw
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.load_cert_chain(certfile=str(CERT), keyfile=str(KEY))
+        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+        scheme = "https"
 
+    url = f"{scheme}://{args.host}:{args.port}/"
     agent = "available" if shutil.which("opencode") else "not installed"
-    print(f"ThatOsintMe  https://{args.host}:{args.port}/")
-    print(f"  user      {user}")
-    print(f"  password  {pw}")
+    print(f"ThatOsintMe  {url}")
+    if secure:
+        print(f"  mode      LAN — TLS + password (self-signed cert; your phone warns once)")
+        print(f"  user      {user}")
+        print(f"  password  {pw}")
+    else:
+        print(f"  mode      local — no password; the in-app attestation is the gate")
     print(f"  api       /api/health · /api/relay · /api/tool · /api/workflow · /api/agent")
     print(f"  agent     opencode {agent} · model {AGENT_MODEL or 'auto (opencode default)'}")
-    print("  (self-signed cert — your phone will warn once; accept it)")
+    if args.open:
+        def _open():
+            try:
+                import webbrowser
+                webbrowser.open(url)
+            except Exception:
+                pass
+        threading.Timer(1.0, _open).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

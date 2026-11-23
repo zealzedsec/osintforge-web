@@ -19,17 +19,23 @@ dorks), and adds an `thatosintme` launcher to `~/.local/bin`. Flags:
 ## Run
 
 ```bash
-thatosintme            # after install: LAN HTTPS on :8443 (reachable from your phone)
-./start.sh            # same, from the repo
-python3 serve.py --host 127.0.0.1 --port 8443   # loopback only
+thatosintme           # local: opens your browser, NO password — just state your
+                      #        purpose and type "I AGREE" (the attestation gate)
+thatosintme --lan     # phone/LAN: TLS + a generated password, reachable from your phone
+thatosintme --lan 9443   # ...on a custom port
+./start.sh [--lan] [port]   # same, from the repo
 ```
 
-It prints a generated Basic-auth password (also in `.credentials`, mode 0600)
-and uses a self-signed TLS cert (your browser warns once — accept it). Nothing
-is exposed to the internet.
+**Local mode (default)** binds loopback and serves plain HTTP with no password —
+loopback isn't reachable from the network, so the in-app lawful-use attestation
+(purpose + "I AGREE") is the only gate. localhost is a browser "secure context",
+so image hashing/clipboard still work. **`--lan` mode** binds your LAN IP and
+automatically switches on a generated Basic-auth password (also in
+`.credentials`, mode 0600) over a self-signed TLS cert (your phone warns once).
+Either way it is never exposed to the internet.
 
-No dependencies beyond Python 3.11+ and `openssl`. For the agent, `opencode`
-must be on `PATH` and logged in to a provider (`opencode providers`).
+No dependencies beyond Python 3.11+ and `openssl` (only `--lan` needs openssl).
+For the agent, `opencode` must be on `PATH` and logged in (`opencode providers`).
 
 ## What's new in v4
 
